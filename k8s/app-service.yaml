@@ -1,0 +1,17 @@
+# ──────────────────────────────────────────────────────────────
+# Kubernetes Service — Catalog Microservice
+# ──────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: catalog-service
+  labels:
+    app: catalog-service
+spec:
+  type: ClusterIP
+  selector:
+    app: catalog-service
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
