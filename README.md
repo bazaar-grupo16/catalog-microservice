@@ -92,6 +92,11 @@ doctl kubernetes cluster kubeconfig save <CLUSTER_ID>
 |--------|------|-------------|
 | GET | `/livez` | Liveness probe — siempre 200 |
 | GET | `/readyz` | Readiness probe — verifica conexión a DB |
+| POST | `/products` | Crear producto |
+| GET | `/products` | Listar productos con paginación y filtros |
+| GET | `/products/{product_id}` | Ver detalle de producto |
+| PUT | `/products/{product_id}` | Reemplazar producto |
+| PATCH | `/products/{product_id}/status` | Activar o desactivar producto |
 | GET | `/docs` | Swagger UI (auto-generado) |
 | GET | `/redoc` | ReDoc (auto-generado) |
 
@@ -171,12 +176,32 @@ El pipeline en `.github/workflows/deploy.yml` corre automáticamente en cada pus
 
 Al iniciar, la aplicación espera a que la base de datos esté disponible usando **backoff exponencial** (1s → 2s → 4s → … hasta 30s por intento, máximo 5 minutos en total) antes de ejecutar las migraciones y aceptar tráfico. Esto evita crasheos durante el arranque del pod cuando la BD aún está inicializándose.
 
-## Próximos pasos
+## CRUD de productos
 
-El próximo incremento del servicio agrega el dominio de catálogo sobre esta misma base:
+El servicio expone una primera base funcional de catálogo con:
 
-1. Crear el modelo SQLAlchemy del dominio en `src/models/`.
-2. Crear los schemas Pydantic en `src/schemas/`.
-3. Implementar la lógica de negocio en `src/services/`.
-4. Crear el router en `src/api/` e incluirlo en `src/main.py`.
-5. Agregar tests de integración en `tests/`.
+- persistencia propia en PostgreSQL;
+- soft delete mediante `status=inactive`;
+- visibilidad pública por default solo para productos `active` con `stock > 0`;
+- detalle visible para productos activos aunque tengan `stock = 0`;
+- filtros opcionales por `category` y `seller_id`;
+- paginación simple por `limit` y `offset`.
+
+### Ejemplo de creación
+
+```json
+{
+  "title": "Mechanical Keyboard",
+  "description": "Compact keyboard with tactile switches",
+  "price": 129.90,
+  "stock": 8,
+  "category": "peripherals",
+  "seller_id": "6bf5e4aa-18e2-4ff8-a7a4-b87c60567b83"
+}
+```
+
+### Reglas principales
+
+- `GET /products` devuelve por default solo productos activos con stock.
+- `GET /products/{product_id}` oculta productos inactivos salvo que se use `include_inactive=true`.
+- `PATCH /products/{product_id}/status` permite publicar o despublicar sin borrar físicamente el registro.
