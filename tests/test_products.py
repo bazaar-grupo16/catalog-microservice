@@ -93,6 +93,93 @@ class TestListProducts:
         assert body["offset"] == 1
         assert len(body["items"]) == 2
 
+    def test_searches_by_title_before_description(self, client: TestClient) -> None:
+        client.post(
+            "/products",
+            json=product_payload(
+                title="Gaming Mouse",
+                description="High precision pointer",
+            ),
+        )
+        client.post(
+            "/products",
+            json=product_payload(
+                title="Keyboard",
+                description="Includes a gaming mouse pad",
+            ),
+        )
+
+        response = client.get("/products", params={"search_query": "gaming mouse"})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 2
+        assert body["items"][0]["title"] == "Gaming Mouse"
+        assert body["items"][1]["title"] == "Keyboard"
+
+    def test_searches_by_description(self, client: TestClient) -> None:
+        client.post(
+            "/products",
+            json=product_payload(
+                title="Desk Lamp",
+                description="Warm light for reading sessions",
+            ),
+        )
+
+        response = client.get("/products", params={"search_query": "reading"})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 1
+        assert body["items"][0]["title"] == "Desk Lamp"
+
+    def test_search_without_results_returns_empty_list(self, client: TestClient) -> None:
+        client.post("/products", json=product_payload())
+
+        response = client.get("/products", params={"search_query": "nonexistent"})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 0
+        assert body["items"] == []
+
+    def test_search_hides_inactive_and_out_of_stock_products(
+        self, client: TestClient
+    ) -> None:
+        visible = client.post(
+            "/products",
+            json=product_payload(
+                title="Searchable Camera",
+                description="A camera for travel",
+            ),
+        )
+        client.post(
+            "/products",
+            json=product_payload(
+                title="Searchable Camera No Stock",
+                description="A camera for travel",
+                stock=0,
+            ),
+        )
+        inactive = client.post(
+            "/products",
+            json=product_payload(
+                title="Searchable Camera Disabled",
+                description="A camera for travel",
+            ),
+        )
+        client.patch(
+            f"/products/{inactive.json()['id']}/status",
+            json={"status": "inactive"},
+        )
+
+        response = client.get("/products", params={"search_query": "camera"})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 1
+        assert [item["id"] for item in body["items"]] == [visible.json()["id"]]
+
 
 class TestProductDetail:
     """Single-product retrieval scenarios."""
@@ -136,6 +223,12 @@ class TestProductDetail:
 
         assert response.status_code == 200
         assert response.json()["status"] == "inactive"
+
+    def test_returns_404_for_nonexistent_product(self, client: TestClient) -> None:
+        response = client.get(f"/products/{uuid4()}")
+
+        assert response.status_code == 404
+        assert response.json() == {"detail": "Product not found"}
 
 
 class TestUpdateProduct:

@@ -184,6 +184,7 @@ El servicio expone una primera base funcional de catálogo con:
 - soft delete mediante `status=inactive`;
 - visibilidad pública por default solo para productos `active` con `stock > 0`;
 - detalle visible para productos activos aunque tengan `stock = 0`;
+- búsqueda por texto en `title` y `description` con prioridad de matches en `title`;
 - filtros opcionales por `category` y `seller_id`;
 - paginación simple por `limit` y `offset`.
 
@@ -203,5 +204,17 @@ El servicio expone una primera base funcional de catálogo con:
 ### Reglas principales
 
 - `GET /products` devuelve por default solo productos activos con stock.
+- `GET /products?search_query=keyboard` busca coincidencias parciales case-insensitive en `title` y `description`.
+- Cuando una búsqueda matchea en ambos campos, se priorizan primero los resultados con match en `title` y luego se desempata por `created_at desc`.
 - `GET /products/{product_id}` oculta productos inactivos salvo que se use `include_inactive=true`.
+- `GET /products/{product_id}` devuelve `404` si el producto no existe.
 - `PATCH /products/{product_id}/status` permite publicar o despublicar sin borrar físicamente el registro.
+
+### Ejemplos de consultas
+
+```bash
+curl "http://localhost:8000/products?limit=12&offset=0"
+curl "http://localhost:8000/products?search_query=keyboard"
+curl "http://localhost:8000/products?search_query=monitor&category=peripherals"
+curl "http://localhost:8000/products/<product_id>"
+```
