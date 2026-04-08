@@ -11,6 +11,7 @@ same environment variables the application uses in production
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 
 from src.core.database import Base, engine
 from src.main import app
@@ -22,6 +23,14 @@ def _setup_database():
     Base.metadata.create_all(bind=engine)
     yield
     Base.metadata.drop_all(bind=engine)
+
+
+@pytest.fixture(autouse=True)
+def _clean_database() -> None:
+    """Truncate domain tables between tests to keep cases isolated."""
+    with engine.begin() as connection:
+        connection.execute(text("TRUNCATE TABLE products RESTART IDENTITY CASCADE"))
+    yield
 
 
 @pytest.fixture()
