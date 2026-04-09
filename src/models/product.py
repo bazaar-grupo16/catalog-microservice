@@ -5,7 +5,6 @@ Product ORM model for the catalog microservice.
 from __future__ import annotations
 
 from datetime import datetime
-from enum import StrEnum
 from uuid import UUID, uuid4
 
 from sqlalchemy import DateTime, Numeric, String, Text
@@ -13,14 +12,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
 
 from src.core.database import Base
+from src.core.enums import ProductStatus
 from src.core.utils import utc_now
-
-
-class ProductStatus(StrEnum):
-    """Allowed publication states for products."""
-
-    ACTIVE = "active"
-    INACTIVE = "inactive"
 
 
 class Product(Base):
