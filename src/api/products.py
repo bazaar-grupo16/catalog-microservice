@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Query, status
 
 from src.core.dependencies import DbSession
 from src.schemas import (
@@ -87,13 +87,7 @@ async def get_product_endpoint(
     db: DbSession,
     include_inactive: bool = False,
 ) -> ProductResponse:
-    product = get_product(db, product_id, include_inactive=include_inactive)
-    if product is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Product not found",
-        )
-    return product
+    return get_product(db, product_id, include_inactive=include_inactive)
 
 
 @router.put(
@@ -107,13 +101,7 @@ async def update_product_endpoint(
     payload: ProductUpdate,
     db: DbSession,
 ) -> ProductResponse:
-    product = update_product(db, product_id, payload)
-    if product is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Product not found",
-        )
-    return product
+    return update_product(db, product_id, payload)
 
 
 @router.patch(
@@ -127,10 +115,4 @@ async def update_product_status_endpoint(
     payload: ProductStatusUpdate,
     db: DbSession,
 ) -> ProductResponse:
-    product = update_product_status(db, product_id, payload)
-    if product is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Product not found",
-        )
-    return product
+    return update_product_status(db, product_id, payload)

@@ -8,6 +8,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from src.exceptions import ProductNotFound
 from src.models import Product
 from src.repositories import ProductRepository
 from src.schemas import ProductCreate, ProductStatusUpdate, ProductUpdate
@@ -46,16 +47,19 @@ def get_product(
     product_id: UUID,
     *,
     include_inactive: bool = False,
-) -> Product | None:
+) -> Product:
     """Fetch a single product, optionally including inactive ones."""
-    return ProductRepository.find_by_id(db, product_id, include_inactive=include_inactive)
+    product = ProductRepository.find_by_id(db, product_id, include_inactive=include_inactive)
+    if product is None:
+        raise ProductNotFound(product_id)
+    return product
 
 
-def update_product(db: Session, product_id: UUID, payload: ProductUpdate) -> Product | None:
+def update_product(db: Session, product_id: UUID, payload: ProductUpdate) -> Product:
     """Replace product data for an existing product."""
     product = ProductRepository.find_by_id(db, product_id, include_inactive=True)
     if product is None:
-        return None
+        raise ProductNotFound(product_id)
 
     for field, value in payload.model_dump().items():
         setattr(product, field, value)
@@ -67,11 +71,11 @@ def update_product_status(
     db: Session,
     product_id: UUID,
     payload: ProductStatusUpdate,
-) -> Product | None:
+) -> Product:
     """Update the publication status for a product."""
     product = ProductRepository.find_by_id(db, product_id, include_inactive=True)
     if product is None:
-        return None
+        raise ProductNotFound(product_id)
 
     product.status = payload.status.value
     return ProductRepository.save(db, product)

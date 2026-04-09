@@ -225,10 +225,16 @@ class TestProductDetail:
         assert response.json()["status"] == "inactive"
 
     def test_returns_404_for_nonexistent_product(self, client: TestClient) -> None:
-        response = client.get(f"/products/{uuid4()}")
+        product_id = uuid4()
+        response = client.get(f"/products/{product_id}")
 
         assert response.status_code == 404
-        assert response.json() == {"detail": "Product not found"}
+        body = response.json()
+        assert body["type"] == "about:blank"
+        assert body["title"] == "Not Found"
+        assert body["status"] == 404
+        assert body["detail"] == "Product not found"
+        assert body["instance"] == f"/products/{product_id}"
 
 
 class TestUpdateProduct:
