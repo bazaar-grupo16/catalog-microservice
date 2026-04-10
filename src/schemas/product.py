@@ -11,7 +11,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from src.models import ProductStatus
+from src.core.enums import ProductStatus
 
 
 NonEmptyText = Annotated[str, Field(min_length=1, max_length=150)]

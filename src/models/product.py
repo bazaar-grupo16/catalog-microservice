@@ -4,8 +4,7 @@ Product ORM model for the catalog microservice.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from enum import StrEnum
+from datetime import datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import DateTime, Numeric, String, Text
@@ -13,18 +12,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
 
 from src.core.database import Base
-
-
-def utc_now() -> datetime:
-    """Return a timezone-aware UTC timestamp."""
-    return datetime.now(timezone.utc)
-
-
-class ProductStatus(StrEnum):
-    """Allowed publication states for products."""
-
-    ACTIVE = "active"
-    INACTIVE = "inactive"
+from src.core.enums import ProductStatus
+from src.core.utils import utc_now
 
 
 class Product(Base):
