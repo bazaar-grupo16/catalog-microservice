@@ -6,8 +6,6 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy.orm import Session
-
 from src.dtos import CreateProductDTO, UpdateProductDTO, UpdateProductStatusDTO
 from src.exceptions import ProductNotFound
 from src.models import Product
@@ -17,8 +15,8 @@ from src.repositories import ProductRepository
 class ProductService:
     """Service encapsulating business logic for product catalog operations."""
 
-    def __init__(self, db: Session) -> None:
-        self.repository = ProductRepository(db)
+    def __init__(self, product_repository: ProductRepository) -> None:
+        self.repository = product_repository
 
     def create_product(self, dto: CreateProductDTO) -> Product:
         """Create and persist a new product."""
