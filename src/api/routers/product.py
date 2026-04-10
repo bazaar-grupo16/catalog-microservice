@@ -1,5 +1,5 @@
 """
-Product CRUD endpoints for the catalog microservice.
+Product route registrations for the catalog microservice.
 """
 
 from __future__ import annotations
@@ -9,8 +9,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Query, status
 
+from src.api.controllers import ProductController
 from src.core.dependencies import DbSession
-from src.dtos import CreateProductDTO, UpdateProductDTO, UpdateProductStatusDTO
 from src.schemas import (
     ProductCreate,
     ProductListResponse,
@@ -18,7 +18,6 @@ from src.schemas import (
     ProductStatusUpdate,
     ProductUpdate,
 )
-from src.services import ProductService
 
 
 router = APIRouter(prefix="/products", tags=["Products"])
@@ -35,8 +34,7 @@ async def create_product_endpoint(
     payload: ProductCreate,
     db: DbSession,
 ) -> ProductResponse:
-    dto = CreateProductDTO(**payload.model_dump())
-    return ProductService(db).create_product(dto)
+    return await ProductController(db).create_product(payload)
 
 
 @router.get(
@@ -57,7 +55,7 @@ async def list_products_endpoint(
     seller_id: UUID | None = None,
     include_inactive: bool = False,
 ) -> ProductListResponse:
-    products, total = ProductService(db).list_products(
+    return await ProductController(db).list_products(
         limit=limit,
         offset=offset,
         search_query=search_query,
@@ -65,7 +63,6 @@ async def list_products_endpoint(
         seller_id=seller_id,
         include_inactive=include_inactive,
     )
-    return ProductListResponse(items=products, total=total, limit=limit, offset=offset)
 
 
 @router.get(
@@ -82,7 +79,7 @@ async def get_product_endpoint(
     db: DbSession,
     include_inactive: bool = False,
 ) -> ProductResponse:
-    return ProductService(db).get_product(product_id, include_inactive=include_inactive)
+    return await ProductController(db).get_product(product_id, include_inactive=include_inactive)
 
 
 @router.put(
@@ -96,8 +93,7 @@ async def update_product_endpoint(
     payload: ProductUpdate,
     db: DbSession,
 ) -> ProductResponse:
-    dto = UpdateProductDTO(**payload.model_dump())
-    return ProductService(db).update_product(product_id, dto)
+    return await ProductController(db).update_product(product_id, payload)
 
 
 @router.patch(
@@ -111,5 +107,4 @@ async def update_product_status_endpoint(
     payload: ProductStatusUpdate,
     db: DbSession,
 ) -> ProductResponse:
-    dto = UpdateProductStatusDTO(**payload.model_dump())
-    return ProductService(db).update_product_status(product_id, dto)
+    return await ProductController(db).update_product_status(product_id, payload)
