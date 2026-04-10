@@ -10,6 +10,7 @@ from uuid import UUID
 from fastapi import APIRouter, Query, status
 
 from src.core.dependencies import DbSession
+from src.dtos import CreateProductDTO, UpdateProductDTO, UpdateProductStatusDTO
 from src.schemas import (
     ProductCreate,
     ProductListResponse,
@@ -34,7 +35,8 @@ async def create_product_endpoint(
     payload: ProductCreate,
     db: DbSession,
 ) -> ProductResponse:
-    return ProductService(db).create_product(payload)
+    dto = CreateProductDTO(**payload.model_dump())
+    return ProductService(db).create_product(dto)
 
 
 @router.get(
@@ -94,7 +96,8 @@ async def update_product_endpoint(
     payload: ProductUpdate,
     db: DbSession,
 ) -> ProductResponse:
-    return ProductService(db).update_product(product_id, payload)
+    dto = UpdateProductDTO(**payload.model_dump())
+    return ProductService(db).update_product(product_id, dto)
 
 
 @router.patch(
@@ -108,4 +111,5 @@ async def update_product_status_endpoint(
     payload: ProductStatusUpdate,
     db: DbSession,
 ) -> ProductResponse:
-    return ProductService(db).update_product_status(product_id, payload)
+    dto = UpdateProductStatusDTO(**payload.model_dump())
+    return ProductService(db).update_product_status(product_id, dto)

@@ -8,10 +8,10 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from src.dtos import CreateProductDTO, UpdateProductDTO, UpdateProductStatusDTO
 from src.exceptions import ProductNotFound
 from src.models import Product
 from src.repositories import ProductRepository
-from src.schemas import ProductCreate, ProductStatusUpdate, ProductUpdate
 
 
 class ProductService:
@@ -20,9 +20,9 @@ class ProductService:
     def __init__(self, db: Session) -> None:
         self.repository = ProductRepository(db)
 
-    def create_product(self, payload: ProductCreate) -> Product:
+    def create_product(self, dto: CreateProductDTO) -> Product:
         """Create and persist a new product."""
-        product = Product(**payload.model_dump())
+        product = Product(**vars(dto))
         return self.repository.create(product)
 
     def list_products(
@@ -57,13 +57,13 @@ class ProductService:
             raise ProductNotFound(product_id)
         return product
 
-    def update_product(self, product_id: UUID, payload: ProductUpdate) -> Product:
+    def update_product(self, product_id: UUID, dto: UpdateProductDTO) -> Product:
         """Replace product data for an existing product."""
         product = self.repository.find_by_id(product_id, include_inactive=True)
         if product is None:
             raise ProductNotFound(product_id)
 
-        for field, value in payload.model_dump().items():
+        for field, value in vars(dto).items():
             setattr(product, field, value)
 
         return self.repository.save(product)
@@ -71,12 +71,12 @@ class ProductService:
     def update_product_status(
         self,
         product_id: UUID,
-        payload: ProductStatusUpdate,
+        dto: UpdateProductStatusDTO,
     ) -> Product:
         """Update the publication status for a product."""
         product = self.repository.find_by_id(product_id, include_inactive=True)
         if product is None:
             raise ProductNotFound(product_id)
 
-        product.status = payload.status.value
+        product.status = dto.status.value
         return self.repository.save(product)
