@@ -17,13 +17,7 @@ from src.schemas import (
     ProductStatusUpdate,
     ProductUpdate,
 )
-from src.services import (
-    create_product,
-    get_product,
-    list_products,
-    update_product,
-    update_product_status,
-)
+from src.services import ProductService
 
 
 router = APIRouter(prefix="/products", tags=["Products"])
@@ -40,7 +34,7 @@ async def create_product_endpoint(
     payload: ProductCreate,
     db: DbSession,
 ) -> ProductResponse:
-    return create_product(db, payload)
+    return ProductService(db).create_product(payload)
 
 
 @router.get(
@@ -61,8 +55,7 @@ async def list_products_endpoint(
     seller_id: UUID | None = None,
     include_inactive: bool = False,
 ) -> ProductListResponse:
-    products, total = list_products(
-        db,
+    products, total = ProductService(db).list_products(
         limit=limit,
         offset=offset,
         search_query=search_query,
@@ -87,7 +80,7 @@ async def get_product_endpoint(
     db: DbSession,
     include_inactive: bool = False,
 ) -> ProductResponse:
-    return get_product(db, product_id, include_inactive=include_inactive)
+    return ProductService(db).get_product(product_id, include_inactive=include_inactive)
 
 
 @router.put(
@@ -101,7 +94,7 @@ async def update_product_endpoint(
     payload: ProductUpdate,
     db: DbSession,
 ) -> ProductResponse:
-    return update_product(db, product_id, payload)
+    return ProductService(db).update_product(product_id, payload)
 
 
 @router.patch(
@@ -115,4 +108,4 @@ async def update_product_status_endpoint(
     payload: ProductStatusUpdate,
     db: DbSession,
 ) -> ProductResponse:
-    return update_product_status(db, product_id, payload)
+    return ProductService(db).update_product_status(product_id, payload)
