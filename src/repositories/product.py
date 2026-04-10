@@ -16,25 +16,25 @@ from src.models import Product
 class ProductRepository:
     """Repository for product database operations."""
 
-    @staticmethod
-    def create(db: Session, product: Product) -> Product:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def create(self, product: Product) -> Product:
         """Persist a new product and return the refreshed instance."""
-        db.add(product)
-        db.commit()
-        db.refresh(product)
+        self.db.add(product)
+        self.db.commit()
+        self.db.refresh(product)
         return product
 
-    @staticmethod
-    def save(db: Session, product: Product) -> Product:
+    def save(self, product: Product) -> Product:
         """Persist changes to an existing product and return the refreshed instance."""
-        db.add(product)
-        db.commit()
-        db.refresh(product)
+        self.db.add(product)
+        self.db.commit()
+        self.db.refresh(product)
         return product
 
-    @staticmethod
     def find_by_id(
-        db: Session,
+        self,
         product_id: UUID,
         *,
         include_inactive: bool = False,
@@ -43,11 +43,10 @@ class ProductRepository:
         query = select(Product).where(Product.id == product_id)
         if not include_inactive:
             query = query.where(Product.status == ProductStatus.ACTIVE.value)
-        return db.scalar(query)
+        return self.db.scalar(query)
 
-    @staticmethod
     def find_all(
-        db: Session,
+        self,
         *,
         limit: int,
         offset: int,
@@ -93,8 +92,8 @@ class ProductRepository:
         base_query = select(Product).where(*filters)
         count_query = select(func.count()).select_from(Product).where(*filters)
 
-        products = db.scalars(
+        products = self.db.scalars(
             base_query.order_by(*order_by).limit(limit).offset(offset)
         ).all()
-        total = db.scalar(count_query) or 0
+        total = self.db.scalar(count_query) or 0
         return list(products), total
