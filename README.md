@@ -1,6 +1,6 @@
 # Catalog Microservice
 
-Microservicio de catálogo de productos para la plataforma Bazaar. Expone una API REST para crear, consultar y actualizar productos, construida con FastAPI y PostgreSQL.
+Microservicio de catálogo de productos para la plataforma Bazaar. Expone una API REST para crear, consultar, actualizar y eliminar productos, construida con FastAPI y PostgreSQL. La gestión de stock se delega al **inventory service**.
 
 ## Tabla de contenidos
 
@@ -12,6 +12,7 @@ Microservicio de catálogo de productos para la plataforma Bazaar. Expone una AP
   - [Productos](#productos)
   - [Formato de errores](#formato-de-errores)
 - [Arquitectura en capas](#arquitectura-en-capas)
+- [Integración con inventory service](#integración-con-inventory-service)
 
 ## Stack
 
@@ -51,7 +52,9 @@ Microservicio de catálogo de productos para la plataforma Bazaar. Expone una AP
 │   │   ├── product.py          # Request/response schemas de productos
 │   │   └── error.py            # ErrorResponse (RFC 7807)
 │   ├── services/               # Lógica de negocio pura
-│   │   └── product.py          # ProductService: recibe repositorio ya instanciado
+│   │   ├── product.py          # ProductService: orquesta repo, storage e inventory
+│   │   ├── storage.py          # StorageService: cliente S3/DigitalOcean Spaces
+│   │   └── inventory.py        # InventoryService: cliente del inventory service (stub)
 │   └── main.py                 # Punto de entrada, registro de routers y exception handlers
 ├── tests/
 │   ├── conftest.py
@@ -107,16 +110,19 @@ Por ejemplo: `GET http://<cluster-host>/catalog/products`
 
 #### `POST /products` — Crear producto
 
-**Body JSON:**
+Crea el producto en catalog y registra su stock inicial en el inventory service.
+
+**Body (multipart/form-data):**
 
 | Campo | Tipo | Restricciones |
 |-------|------|---------------|
 | `title` | string | 1–150 caracteres, no vacío |
-| `description` | string | 1–150 caracteres, no vacío |
+| `description` | string | mínimo 1 carácter, no vacío |
 | `price` | float | ≥ 0.01 |
-| `stock` | int | ≥ 0 |
-| `category` | string | 1–150 caracteres (se normaliza a minúsculas) |
+| `stock` | int | ≥ 0 — se envía al inventory service |
+| `category` | string | 1–80 caracteres (se normaliza a minúsculas) |
 | `seller_id` | UUID | — |
+| `files` | imágenes | Al menos una imagen (JPEG, PNG o WebP, máx. 10 MB c/u) |
 
 **Respuesta `201`:**
 ```json
@@ -140,7 +146,7 @@ Por ejemplo: `GET http://<cluster-host>/catalog/products`
 
 #### `GET /products` — Listar productos
 
-Por defecto solo devuelve productos activos con stock (`include_inactive=false`).
+Devuelve todos los productos activos. El campo `stock` de cada producto se obtiene del inventory service. Los productos con stock 0 se incluyen en los resultados — el frontend decide cómo mostrarlos visualmente.
 
 **Query params:**
 
@@ -148,10 +154,10 @@ Por defecto solo devuelve productos activos con stock (`include_inactive=false`)
 |-----------|------|---------|-------------|
 | `limit` | int (1–50) | `20` | Cantidad máxima de resultados |
 | `offset` | int (≥0) | `0` | Desplazamiento para paginación |
-| `search_query` | string | — | Búsqueda por texto libre |
+| `search_query` | string | — | Búsqueda por texto libre en título y descripción |
 | `category` | string | — | Filtrar por categoría |
 | `seller_id` | UUID | — | Filtrar por vendedor |
-| `include_inactive` | bool | `false` | Incluir productos inactivos o sin stock |
+| `include_inactive` | bool | `false` | Incluir productos con status `inactive` |
 | `sort_by` | `price` \| `created_at` \| `title` | — | Campo de ordenamiento |
 | `order` | `asc` \| `desc` | `asc` | Dirección del ordenamiento |
 
@@ -169,6 +175,8 @@ Por defecto solo devuelve productos activos con stock (`include_inactive=false`)
 
 #### `GET /products/{id}` — Obtener producto por ID
 
+El `stock` devuelto se consulta en tiempo real al inventory service.
+
 **Respuesta `200`:** objeto `ProductResponse` (mismo formato que al crear).  
 **Respuesta `404`:** error en formato `application/problem+json`.
 
@@ -176,19 +184,61 @@ Por defecto solo devuelve productos activos con stock (`include_inactive=false`)
 
 #### `PATCH /products/{id}` — Actualizar producto parcialmente
 
-Solo se modifican los campos presentes en el body.
+Solo se modifican los campos presentes en el body. Si se incluye `stock`, el cambio se delega al inventory service.
 
 | Campo | Tipo | Restricciones |
 |-------|------|---------------|
 | `title` | string | 1–150 caracteres, no vacío |
 | `description` | string | 1–150 caracteres, no vacío |
 | `price` | float | ≥ 0.01 |
-| `stock` | int | ≥ 0 |
+| `stock` | int | ≥ 0 — se actualiza en el inventory service |
 | `category` | string | 1–150 caracteres (se normaliza a minúsculas) |
 | `status` | `active` \| `inactive` | — |
 
 **Respuesta `200`:** objeto `ProductResponse` con los datos actualizados.  
 **Respuesta `404`:** error en formato `application/problem+json` si el producto no existe.
+
+---
+
+#### `DELETE /products/{id}` — Eliminar producto
+
+Elimina el producto de catalog, borra sus imágenes de DigitalOcean Spaces y elimina su entrada de stock en el inventory service.
+
+**Respuesta `204`:** sin contenido.  
+**Respuesta `404`:** error en formato `application/problem+json` si el producto no existe.
+
+---
+
+#### `POST /products/{id}/images` — Agregar imágenes
+
+**Body (multipart/form-data):** uno o más archivos bajo el campo `files` (JPEG, PNG o WebP, máx. 10 MB c/u).
+
+**Respuesta `200`:** objeto `ProductResponse` con el array `images` actualizado.
+
+---
+
+#### `DELETE /products/{id}/images` — Eliminar imágenes
+
+**Body JSON:**
+```json
+{ "urls": ["https://cdn.../imagen.jpg"] }
+```
+No se pueden eliminar todas las imágenes de un producto activo.
+
+**Respuesta `200`:** objeto `ProductResponse` con el array `images` actualizado.  
+**Respuesta `409`:** si la operación dejaría el producto activo sin imágenes.
+
+---
+
+#### `PATCH /products/{id}/images/order` — Reordenar imágenes
+
+**Body JSON:**
+```json
+{ "urls": ["https://cdn.../b.jpg", "https://cdn.../a.jpg"] }
+```
+Debe contener exactamente las mismas URLs que el producto, en el nuevo orden deseado.
+
+**Respuesta `200`:** objeto `ProductResponse` con el nuevo orden de imágenes.
 
 ---
 
@@ -217,16 +267,14 @@ HTTP Request
 Router          — registra rutas, delega al controller
     │
     ▼
-Controller      — instancia Repository(db) y Service(repo), convierte schemas → DTOs
+Controller      — instancia Repository, StorageService e InventoryService; convierte schemas → DTOs
     │
     ▼
-Service         — lógica de negocio pura, recibe repositorio inyectado, lanza excepciones de dominio
-    │
-    ▼
-Repository      — único lugar que construye queries SQL, usa self.db
-    │
-    ▼
-PostgreSQL
+Service         — lógica de negocio, coordina repo + storage + inventory; lanza excepciones de dominio
+    ├──▶ Repository      — único lugar que construye queries SQL
+    │        └──▶ PostgreSQL
+    ├──▶ StorageService  — cliente S3 para imágenes (DigitalOcean Spaces)
+    └──▶ InventoryService — cliente HTTP del inventory service (gestión de stock)
 ```
 
 **Regla de dependencias:** cada capa solo conoce a la inmediatamente inferior. El servicio no importa nada de `src.schemas` ni de FastAPI. Los routers no tienen lógica de negocio ni acceso a base de datos.
@@ -234,3 +282,18 @@ PostgreSQL
 **DTOs (`src/dtos.py`):** dataclasses sin validación que transportan datos entre el controller y el servicio. La validación ocurre en los schemas de Pydantic antes de construir el DTO.
 
 **Excepciones de dominio (`src/exceptions/`):** el servicio lanza `ProductNotFound` (y similares a futuro) en lugar de devolver `None`. `main.py` registra un handler global que serializa estas excepciones a `application/problem+json` según RFC 7807.
+
+## Integración con inventory service
+
+El campo `stock` no se almacena en la base de datos del catalog. En cambio, `InventoryService` (`src/services/inventory.py`) actúa como cliente del inventory microservice:
+
+| Operación | Comportamiento |
+|-----------|---------------|
+| `POST /products` | Crea el producto en catalog y llama a inventory para registrar el stock inicial |
+| `GET /products` / `GET /products/{id}` | Obtiene el stock desde inventory y lo inyecta en la respuesta |
+| `PATCH /products/{id}` (con `stock`) | Delega la actualización de stock a inventory |
+| `DELETE /products/{id}` | Elimina el producto de catalog y llama a inventory para eliminar su entrada de stock |
+
+**Estado actual:** `InventoryService` es un stub que retorna valores hardcodeados mientras el inventory service está siendo implementado. Para reemplazarlo por llamadas HTTP reales, solo hay que modificar `src/services/inventory.py` sin tocar el resto del código.
+
+**Variable de entorno:** `INVENTORY_SERVICE_URL` — URL base del inventory service (requerida cuando el stub sea reemplazado).
