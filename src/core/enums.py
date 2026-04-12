@@ -6,7 +6,16 @@ from enum import StrEnum
 
 
 class ProductStatus(StrEnum):
-    """Allowed publication states for products."""
-
     ACTIVE = "active"
     INACTIVE = "inactive"
+
+
+class ProductSortBy(StrEnum):
+    PRICE = "price"
+    CREATED_AT = "created_at"
+    TITLE = "title"
+
+
+class SortOrder(StrEnum):
+    ASC = "asc"
+    DESC = "desc"
