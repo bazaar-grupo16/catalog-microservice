@@ -34,16 +34,9 @@ class ProductRepository:
         self.db.refresh(product)
         return product
 
-    def find_by_id(
-        self,
-        product_id: UUID,
-        *,
-        include_inactive: bool = False,
-    ) -> Product | None:
-        """Fetch a single product by primary key, optionally including inactive ones."""
+    def find_by_id(self, product_id: UUID) -> Product | None:
+        """Fetch a single product by primary key, including inactive ones."""
         query = select(Product).where(Product.id == product_id)
-        if not include_inactive:
-            query = query.where(Product.status == ProductStatus.ACTIVE.value)
         return self.db.scalar(query)
 
     def find_all(self, dto: ProductFilterDTO) -> tuple[list[Product], int]:

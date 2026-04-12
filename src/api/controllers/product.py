@@ -8,19 +8,13 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from src.dtos import (
-    CreateProductDTO,
-    ProductFilterDTO,
-    UpdateProductDTO,
-    UpdateProductStatusDTO,
-)
+from src.dtos import CreateProductDTO, ProductFilterDTO, UpdateProductDTO
 from src.repositories import ProductRepository
 from src.schemas import (
     ProductListRequest,
     ProductListResponse,
     ProductResponse,
     ProductCreateRequest,
-    ProductStatusUpdateRequest,
     ProductUpdateRequest,
 )
 from src.services import ProductService
@@ -65,13 +59,4 @@ class ProductController:
     ) -> ProductResponse:
         dto = UpdateProductDTO(**payload.model_dump())
         product = self.service.update_product(product_id, dto)
-        return ProductResponse(data=product)
-
-    async def update_product_status(
-        self,
-        product_id: UUID,
-        payload: ProductStatusUpdateRequest,
-    ) -> ProductResponse:
-        dto = UpdateProductStatusDTO(**payload.model_dump())
-        product = self.service.update_product_status(product_id, dto)
         return ProductResponse(data=product)

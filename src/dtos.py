@@ -26,17 +26,12 @@ class CreateProductDTO:
 
 @dataclass
 class UpdateProductDTO:
-    title: str
-    description: str
-    price: float
-    stock: int
-    category: str
-    seller_id: UUID
-
-
-@dataclass
-class UpdateProductStatusDTO:
-    status: ProductStatus
+    title: str | None = None
+    description: str | None = None
+    price: float | None = None
+    stock: int | None = None
+    category: str | None = None
+    status: ProductStatus | None = None
 
 
 @dataclass

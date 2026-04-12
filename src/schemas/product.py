@@ -96,10 +96,28 @@ class ProductCreateRequest(BaseModel):
 
 
 class ProductUpdateRequest(BaseModel):
-    # TODO
-    pass
+    title: NonEmptyText | None = None
+    description: NonEmptyText | None = None
+    price: NonNegativePrice | None = None
+    stock: NonNegativeStock | None = None
+    category: NonEmptyText | None = None
+    status: ProductStatus | None = None
 
+    @field_validator("price", mode="before")
+    @classmethod
+    def reject_booleans(cls, v):
+        if isinstance(v, bool):
+            raise ValueError("Must be a number, not a boolean")
+        return v
 
-class ProductStatusUpdateRequest(BaseModel):
-    # TODO
-    pass
+    @field_validator("title", "description", "category")
+    @classmethod
+    def reject_empty_strings(cls, v):
+        if v is not None and not v.strip():
+            raise ValueError("Must not be empty or blank")
+        return v
+
+    @field_validator("category")
+    @classmethod
+    def normalize_category(cls, value: str | None) -> str | None:
+        return value.lower() if value is not None else None

@@ -14,7 +14,6 @@ from src.schemas import (
     ProductListRequest,
     ProductListResponse,
     ProductResponse,
-    ProductStatusUpdateRequest,
     ProductUpdateRequest,
     ErrorResponse,
 )
@@ -76,29 +75,15 @@ async def get_product(
     return await ProductController(db).get_product(id)
 
 
-@router.put(
-    "/{product_id}",
+@router.patch(
+    "/{id}",
     response_model=ProductResponse,
-    summary="Replace product",
-    description="Replaces the editable fields of an existing product.",
+    summary="Update product",
+    description="Partially updates a product. Only the provided fields are modified.",
 )
-async def update_product_endpoint(
-    product_id: UUID,
+async def update_product(
+    id: UUID,
     payload: ProductUpdateRequest,
     db: DbSession,
 ) -> ProductResponse:
-    return await ProductController(db).update_product(product_id, payload)
-
-
-@router.patch(
-    "/{product_id}/status",
-    response_model=ProductResponse,
-    summary="Change product status",
-    description="Publishes or unpublishes a product by updating its status.",
-)
-async def update_product_status_endpoint(
-    product_id: UUID,
-    payload: ProductStatusUpdateRequest,
-    db: DbSession,
-) -> ProductResponse:
-    return await ProductController(db).update_product_status(product_id, payload)
+    return await ProductController(db).update_product(id, payload)
