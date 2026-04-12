@@ -6,7 +6,12 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from src.dtos import CreateProductDTO, UpdateProductDTO, UpdateProductStatusDTO
+from src.dtos import (
+    CreateProductDTO,
+    ProductFilterDTO,
+    UpdateProductDTO,
+    UpdateProductStatusDTO,
+)
 from src.exceptions import ProductNotFound
 from src.models import Product
 from src.repositories import ProductRepository
@@ -23,25 +28,9 @@ class ProductService:
         product = Product(**vars(dto))
         return self.repository.create(product)
 
-    def list_products(
-        self,
-        *,
-        limit: int,
-        offset: int,
-        search_query: str | None = None,
-        category: str | None = None,
-        seller_id: UUID | None = None,
-        include_inactive: bool = False,
-    ) -> tuple[list[Product], int]:
+    def get_products(self, filters: ProductFilterDTO) -> tuple[list[Product], int]:
         """Return a paginated product list following public visibility rules."""
-        return self.repository.find_all(
-            limit=limit,
-            offset=offset,
-            search_query=search_query,
-            category=category,
-            seller_id=seller_id,
-            include_inactive=include_inactive,
-        )
+        return self.repository.find_all(filters)
 
     def get_product(
         self,
