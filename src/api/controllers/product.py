@@ -77,6 +77,9 @@ class ProductController:
         product = self.service.get_product(product_id)
         return ProductResponse(data=product)
 
+    async def delete_product(self, product_id: UUID) -> None:
+        self.service.delete_product(product_id)
+
     async def update_product(
         self,
         product_id: UUID,

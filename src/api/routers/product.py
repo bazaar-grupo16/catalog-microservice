@@ -5,7 +5,7 @@ Product route registrations for the catalog microservice.
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, Response, UploadFile
 
 from src.api.controllers import ProductController
 from src.core.dependencies import DbSession
@@ -83,6 +83,27 @@ async def get_product(
     db: DbSession,
 ) -> ProductResponse:
     return await ProductController(db).get_product(id)
+
+
+@router.delete(
+    "/{id}",
+    status_code=204,
+    summary="Delete a product by ID",
+    description=(
+        "Deletes the product and attempts to remove all its images from storage. "
+        "Storage errors are logged as warnings and do not abort the deletion."
+    ),
+    responses={
+        204: {"description": "Product deleted successfully"},
+        404: {"description": "Product not found", "model": ErrorResponse},
+    },
+)
+async def delete_product(
+    id: UUID,
+    db: DbSession,
+) -> Response:
+    await ProductController(db).delete_product(id)
+    return Response(status_code=204)
 
 
 @router.patch(

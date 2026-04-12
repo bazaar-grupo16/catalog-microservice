@@ -4,6 +4,7 @@ Business logic for product catalog operations.
 
 from __future__ import annotations
 
+import logging
 from uuid import UUID, uuid4
 
 from src.core.enums import ProductStatus
@@ -30,6 +31,8 @@ from src.services.storage import (
     MAX_FILE_SIZE,
     StorageService,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ProductService:
@@ -74,6 +77,24 @@ class ProductService:
         if product is None:
             raise ProductNotFound(product_id)
         return product
+
+    def delete_product(self, product_id: UUID) -> None:
+        """Delete a product and attempt to remove its images from storage."""
+        product = self.repository.find_by_id(product_id)
+        if product is None:
+            raise ProductNotFound(product_id)
+
+        for url in list(product.images or []):
+            try:
+                self.storage.delete(self.storage.url_to_key(url))
+            except Exception:
+                logger.warning(
+                    "Failed to delete image from storage: %s (product=%s)",
+                    url,
+                    product_id,
+                )
+
+        self.repository.delete(product)
 
     def update_product(self, product_id: UUID, dto: UpdateProductDTO) -> Product:
         """Partially update a product, only touching fields that were provided."""
