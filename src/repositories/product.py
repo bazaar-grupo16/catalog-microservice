@@ -53,12 +53,7 @@ class ProductRepository:
             if dto.category is not None:
                 filters.append(Product.category == dto.category.strip().lower())
         else:
-            filters.extend(
-                [
-                    Product.status == ProductStatus.ACTIVE.value,
-                    Product.stock > 0,
-                ]
-            )
+            filters.append(Product.status == ProductStatus.ACTIVE.value)
             if dto.category is not None:
                 filters.append(Product.category == dto.category.strip().lower())
 

@@ -20,6 +20,7 @@ from src.dtos import (
     UpdateProductDTO,
 )
 from src.repositories import ProductRepository
+from src.services.inventory import InventoryService
 from src.services.storage import StorageService
 from src.schemas import (
     DeleteImagesRequest,
@@ -41,6 +42,7 @@ class ProductController:
         self.service = ProductService(
             product_repository=ProductRepository(db),
             storage_service=StorageService(),
+            inventory_service=InventoryService(),
         )
 
     async def create_product(

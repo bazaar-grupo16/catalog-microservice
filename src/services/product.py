@@ -26,6 +26,7 @@ from src.exceptions import (
 )
 from src.models import Product
 from src.repositories import ProductRepository
+from src.services.inventory import InventoryService
 from src.services.storage import (
     ALLOWED_MIME_TYPES,
     MAX_FILE_SIZE,
@@ -42,17 +43,25 @@ class ProductService:
         self,
         product_repository: ProductRepository,
         storage_service: StorageService,
+        inventory_service: InventoryService,
     ) -> None:
         self.repository = product_repository
         self.storage = storage_service
+        self.inventory = inventory_service
 
     def create_product(
         self, dto: CreateProductDTO, images_dto: AddImagesDTO
     ) -> Product:
-        """Create a product and upload its initial images atomically."""
+        """Create a product, upload its initial images, and register it in inventory."""
         self._validate_files(images_dto.files)
 
-        product = Product(**vars(dto))
+        product = Product(
+            title=dto.title,
+            description=dto.description,
+            price=dto.price,
+            category=dto.category,
+            seller_id=dto.seller_id,
+        )
         product = self.repository.create(product)
 
         urls: list[str] = []
@@ -63,21 +72,29 @@ class ProductService:
 
         product.images = urls
         product.updated_at = utc_now()
-        return self.repository.save(product)
+        product = self.repository.save(product)
+
+        self.inventory.create_product_stock(product.id, dto.stock)
+        return self._enrich_stock(product)
 
     def get_products(self, filters: ProductFilterDTO) -> tuple[list[Product], int]:
-        """Return a paginated product list following public visibility rules."""
-        return self.repository.find_all(filters)
+        """Return a paginated product list. Stock is enriched from inventory for display."""
+        products, total = self.repository.find_all(filters)
+        if products:
+            stocks = self.inventory.get_stocks([p.id for p in products])
+            for product in products:
+                product.stock = stocks.get(product.id, 0)
+        return products, total
 
     def get_product(self, product_id: UUID) -> Product:
-        """Fetch a single product details."""
+        """Fetch a single product, enriching its stock from inventory."""
         product = self.repository.find_by_id(product_id)
         if product is None:
             raise ProductNotFound(product_id)
-        return product
+        return self._enrich_stock(product)
 
     def delete_product(self, product_id: UUID) -> None:
-        """Delete a product and attempt to remove its images from storage."""
+        """Delete a product, remove its images from storage, and deregister it from inventory."""
         product = self.repository.find_by_id(product_id)
         if product is None:
             raise ProductNotFound(product_id)
@@ -93,18 +110,24 @@ class ProductService:
                 )
 
         self.repository.delete(product)
+        self.inventory.delete_product_stock(product_id)
 
     def update_product(self, product_id: UUID, dto: UpdateProductDTO) -> Product:
-        """Partially update a product, only touching fields that were provided."""
+        """Partially update a product, delegating stock changes to inventory."""
         product = self.repository.find_by_id(product_id)
         if product is None:
             raise ProductNotFound(product_id)
 
         for field, value in vars(dto).items():
-            if value is not None:
-                setattr(product, field, value)
+            if field == "stock" or value is None:
+                continue
+            setattr(product, field, value)
 
-        return self.repository.save(product)
+        if dto.stock is not None:
+            self.inventory.update_product_stock(product_id, dto.stock)
+
+        product = self.repository.save(product)
+        return self._enrich_stock(product)
 
     def _validate_files(self, files: list[ImageFileDTO]) -> None:
         """Raise ImageValidationError if any file has an unsupported type or exceeds the size limit."""
@@ -118,6 +141,11 @@ class ProductService:
                 raise ImageValidationError(
                     f"File exceeds the 10 MB size limit ({len(f.data)} bytes)."
                 )
+
+    def _enrich_stock(self, product: Product) -> Product:
+        """Set product.stock from inventory (non-mapped attribute for response serialization)."""
+        product.stock = self.inventory.get_product_stock(product.id)
+        return product
 
     def add_images(self, product_id: UUID, dto: AddImagesDTO) -> Product:
         """Validate, upload, and append images to a product."""
@@ -136,7 +164,7 @@ class ProductService:
 
         product.images = list(product.images or []) + new_urls
         product.updated_at = utc_now()
-        return self.repository.save(product)
+        return self._enrich_stock(self.repository.save(product))
 
     def delete_images(self, product_id: UUID, dto: DeleteImagesDTO) -> Product:
         """Remove images from a product and delete them from storage."""
@@ -160,7 +188,7 @@ class ProductService:
 
         product.images = remaining
         product.updated_at = utc_now()
-        return self.repository.save(product)
+        return self._enrich_stock(self.repository.save(product))
 
     def reorder_images(self, product_id: UUID, dto: ReorderImagesDTO) -> Product:
         """Replace the images array with a new ordering of the same URLs."""
@@ -179,4 +207,4 @@ class ProductService:
 
         product.images = provided
         product.updated_at = utc_now()
-        return self.repository.save(product)
+        return self._enrich_stock(self.repository.save(product))
