@@ -39,6 +39,11 @@ class ProductRepository:
         query = select(Product).where(Product.id == product_id)
         return self.db.scalar(query)
 
+    def delete(self, product: Product) -> None:
+        """Delete a product record from the database."""
+        self.db.delete(product)
+        self.db.commit()
+
     def find_all(self, dto: ProductFilterDTO) -> tuple[list[Product], int]:
         """Return a paginated product list with optional filters applied."""
         filters = []
@@ -48,12 +53,7 @@ class ProductRepository:
             if dto.category is not None:
                 filters.append(Product.category == dto.category.strip().lower())
         else:
-            filters.extend(
-                [
-                    Product.status == ProductStatus.ACTIVE.value,
-                    Product.stock > 0,
-                ]
-            )
+            filters.append(Product.status == ProductStatus.ACTIVE.value)
             if dto.category is not None:
                 filters.append(Product.category == dto.category.strip().lower())
 

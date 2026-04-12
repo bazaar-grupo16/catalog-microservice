@@ -24,6 +24,14 @@ class Settings(BaseSettings):
     DB_PASSWORD: str
     DB_NAME: str
 
+    # ── DigitalOcean Spaces ───────────────────────────
+    SPACES_KEY: str
+    SPACES_SECRET: str
+    SPACES_BUCKET: str
+    SPACES_REGION: str
+    SPACES_ENDPOINT: str
+    SPACES_CDN_ENDPOINT: str
+
     # ── Pydantic-settings config ─────────────────────
     model_config = SettingsConfigDict(
         env_file=".env",

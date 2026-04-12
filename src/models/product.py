@@ -7,7 +7,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, Numeric, String, Text
+from sqlalchemy import DateTime, JSON, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
 
@@ -29,7 +29,6 @@ class Product(Base):
     title: Mapped[str] = mapped_column(String(150), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
-    stock: Mapped[int] = mapped_column(nullable=False)
     category: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     seller_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True), nullable=False, index=True
@@ -51,4 +50,9 @@ class Product(Base):
         nullable=False,
         default=utc_now,
         onupdate=utc_now,
+    )
+    images: Mapped[list] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
     )
