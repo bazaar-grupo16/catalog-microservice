@@ -74,7 +74,7 @@ class TestCreateProduct:
 class TestListProducts:
     """Listing scenarios with visibility rules and filters."""
 
-    def test_hides_out_of_stock_products_by_default(self, client: TestClient) -> None:
+    def test_returns_products_regardless_of_stock(self, client: TestClient) -> None:
         client.post(
             "/products", data=product_form(title="Visible Product"), files=PRODUCT_IMAGE
         )
@@ -89,7 +89,7 @@ class TestListProducts:
         assert response.status_code == 200
         titles = [item["title"] for item in response.json()["data"]]
         assert "Visible Product" in titles
-        assert "Out of Stock" not in titles
+        assert "Out of Stock" in titles
 
     def test_filters_by_category(self, client: TestClient) -> None:
         client.post(
@@ -255,7 +255,9 @@ class TestListProducts:
         assert response.status_code == 200
         assert response.json()["total"] == 2
 
-    def test_search_hides_out_of_stock_products(self, client: TestClient) -> None:
+    def test_search_returns_all_matching_products_regardless_of_stock(
+        self, client: TestClient
+    ) -> None:
         client.post(
             "/products",
             data=product_form(
@@ -277,8 +279,10 @@ class TestListProducts:
 
         assert response.status_code == 200
         body = response.json()
-        assert body["total"] == 1
-        assert body["data"][0]["title"] == "Available Camera"
+        assert body["total"] == 2
+        titles = [item["title"] for item in body["data"]]
+        assert "Available Camera" in titles
+        assert "Out of Stock Camera" in titles
 
 
 class TestProductDetail:
