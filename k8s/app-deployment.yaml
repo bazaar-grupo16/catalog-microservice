@@ -51,6 +51,36 @@ spec:
                 secretKeyRef:
                   name: catalog-db-credentials
                   key: DB_NAME
+            - name: SPACES_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: catalog-db-credentials
+                  key: SPACES_KEY
+            - name: SPACES_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: catalog-db-credentials
+                  key: SPACES_SECRET
+            - name: SPACES_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: catalog-db-credentials
+                  key: SPACES_BUCKET
+            - name: SPACES_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: catalog-db-credentials
+                  key: SPACES_REGION
+            - name: SPACES_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: catalog-db-credentials
+                  key: SPACES_ENDPOINT
+            - name: SPACES_CDN_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: catalog-db-credentials
+                  key: SPACES_CDN_ENDPOINT
           # ── Probes ─────────────────────────────────
           livenessProbe:
             httpGet:
