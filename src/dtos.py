@@ -42,3 +42,24 @@ class ProductFilterDTO:
     category: str | None = None
     seller_id: UUID | None = None
     include_inactive: bool = False
+
+
+@dataclass
+class ImageFileDTO:
+    data: bytes
+    content_type: str
+
+
+@dataclass
+class AddImagesDTO:
+    files: list[ImageFileDTO]
+
+
+@dataclass
+class DeleteImagesDTO:
+    urls: list[str]
+
+
+@dataclass
+class ReorderImagesDTO:
+    urls: list[str]

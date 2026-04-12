@@ -1,5 +1,15 @@
 """Domain exception types for the catalog microservice."""
 
-from src.exceptions.product import ProductNotFound
+from src.exceptions.product import (
+    EmptyActiveProductImages,
+    ImageValidationError,
+    InvalidImageURLs,
+    ProductNotFound,
+)
 
-__all__ = ["ProductNotFound"]
+__all__ = [
+    "ProductNotFound",
+    "ImageValidationError",
+    "InvalidImageURLs",
+    "EmptyActiveProductImages",
+]
