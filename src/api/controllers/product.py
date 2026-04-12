@@ -20,6 +20,7 @@ from src.dtos import (
     UpdateProductDTO,
 )
 from src.repositories import ProductRepository
+from src.services.storage import StorageService
 from src.schemas import (
     DeleteImagesRequest,
     ProductCreateForm,
@@ -39,6 +40,7 @@ class ProductController:
     def __init__(self, db: Session) -> None:
         self.service = ProductService(
             product_repository=ProductRepository(db),
+            storage_service=StorageService(),
         )
 
     async def create_product(
@@ -76,6 +78,9 @@ class ProductController:
     async def get_product(self, product_id: UUID) -> ProductResponse:
         product = self.service.get_product(product_id)
         return ProductResponse(data=product)
+
+    async def delete_product(self, product_id: UUID) -> None:
+        self.service.delete_product(product_id)
 
     async def update_product(
         self,

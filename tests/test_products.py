@@ -421,3 +421,99 @@ class TestUpdateProduct:
         response = client.patch(f"/products/{product_id}", json={"price": True})
 
         assert response.status_code == 422
+
+
+class TestDeleteProduct:
+    """Deletion scenarios for DELETE /products/{id}."""
+
+    def test_returns_204(self, client: TestClient) -> None:
+        create_response = client.post(
+            "/products", data=product_form(), files=PRODUCT_IMAGE
+        )
+        product_id = create_response.json()["data"]["id"]
+
+        response = client.delete(f"/products/{product_id}")
+
+        assert response.status_code == 204
+        assert response.content == b""
+
+    def test_deleted_product_is_no_longer_accessible(self, client: TestClient) -> None:
+        create_response = client.post(
+            "/products", data=product_form(), files=PRODUCT_IMAGE
+        )
+        product_id = create_response.json()["data"]["id"]
+        client.delete(f"/products/{product_id}")
+
+        response = client.get(f"/products/{product_id}")
+
+        assert response.status_code == 404
+
+    def test_deleted_product_disappears_from_listing(self, client: TestClient) -> None:
+        create_response = client.post(
+            "/products", data=product_form(title="To Be Deleted"), files=PRODUCT_IMAGE
+        )
+        product_id = create_response.json()["data"]["id"]
+        client.delete(f"/products/{product_id}")
+
+        response = client.get("/products", params={"include_inactive": "true"})
+
+        ids = [item["id"] for item in response.json()["data"]]
+        assert product_id not in ids
+
+    def test_calls_storage_delete_for_each_image(
+        self, client: TestClient, storage_mock
+    ) -> None:
+        create_response = client.post(
+            "/products", data=product_form(), files=PRODUCT_IMAGE
+        )
+        product_id = create_response.json()["data"]["id"]
+        client.post(
+            f"/products/{product_id}/images",
+            files=[("files", ("extra.jpg", b"x" * 100, "image/jpeg"))],
+        )
+        storage_mock.delete.reset_mock()
+
+        client.delete(f"/products/{product_id}")
+
+        assert storage_mock.delete.call_count == 2
+
+    def test_returns_404_for_nonexistent_product(self, client: TestClient) -> None:
+        product_id = uuid4()
+
+        response = client.delete(f"/products/{product_id}")
+
+        assert response.status_code == 404
+        body = response.json()
+        assert body["type"] == "about:blank"
+        assert body["title"] == "Not Found"
+        assert body["status"] == 404
+        assert body["detail"] == "Product not found"
+        assert body["instance"] == f"/products/{product_id}"
+
+    def test_continues_and_deletes_record_if_storage_fails(
+        self, client: TestClient, storage_mock
+    ) -> None:
+        create_response = client.post(
+            "/products", data=product_form(), files=PRODUCT_IMAGE
+        )
+        product_id = create_response.json()["data"]["id"]
+        storage_mock.delete.side_effect = Exception("Spaces unavailable")
+
+        response = client.delete(f"/products/{product_id}")
+
+        assert response.status_code == 204
+        assert client.get(f"/products/{product_id}").status_code == 404
+
+    def test_deletes_product_with_no_images(self, client: TestClient) -> None:
+        create_response = client.post(
+            "/products", data=product_form(), files=PRODUCT_IMAGE
+        )
+        product_id = create_response.json()["data"]["id"]
+        url = client.get(f"/products/{product_id}").json()["data"]["images"][0]
+        client.patch(f"/products/{product_id}", json={"status": "inactive"})
+        client.request("DELETE", f"/products/{product_id}/images", json={"urls": [url]})
+
+        response = client.delete(f"/products/{product_id}")
+
+        assert response.status_code == 204
+        assert client.get(f"/products/{product_id}").status_code == 404

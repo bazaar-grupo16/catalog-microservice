@@ -79,5 +79,5 @@ def storage_mock():
     mock.url_to_key.side_effect = lambda url: url.removeprefix(f"{_CDN_BASE}/")
     mock.ext_for.side_effect = lambda ct: _MIME_TO_EXT[ct]
 
-    with patch("src.services.product.StorageService", return_value=mock):
+    with patch("src.api.controllers.product.StorageService", return_value=mock):
         yield mock
