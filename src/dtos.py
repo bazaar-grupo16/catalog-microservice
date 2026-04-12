@@ -9,7 +9,6 @@ schemas before the DTO is constructed.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal
 from uuid import UUID
 
 from src.core.enums import ProductStatus
@@ -19,7 +18,7 @@ from src.core.enums import ProductStatus
 class CreateProductDTO:
     title: str
     description: str
-    price: Decimal
+    price: float
     stock: int
     category: str
     seller_id: UUID
@@ -27,14 +26,19 @@ class CreateProductDTO:
 
 @dataclass
 class UpdateProductDTO:
-    title: str
-    description: str
-    price: Decimal
-    stock: int
-    category: str
-    seller_id: UUID
+    title: str | None = None
+    description: str | None = None
+    price: float | None = None
+    stock: int | None = None
+    category: str | None = None
+    status: ProductStatus | None = None
 
 
 @dataclass
-class UpdateProductStatusDTO:
-    status: ProductStatus
+class ProductFilterDTO:
+    limit: int
+    offset: int
+    search_query: str | None = None
+    category: str | None = None
+    seller_id: UUID | None = None
+    include_inactive: bool = False

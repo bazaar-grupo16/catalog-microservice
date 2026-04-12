@@ -30,55 +30,54 @@ class TestCreateProduct:
         response = client.post("/products", json=product_payload())
 
         assert response.status_code == 201
-        body = response.json()
-        assert body["title"] == "Mechanical Keyboard"
-        assert body["category"] == "peripherals"
-        assert body["status"] == "active"
-        assert "id" in body
+        data = response.json()["data"]
+        assert data["title"] == "Mechanical Keyboard"
+        assert data["category"] == "peripherals"
+        assert data["status"] == "active"
+        assert "id" in data
 
     def test_rejects_invalid_payload(self, client: TestClient) -> None:
         response = client.post("/products", json=product_payload(price="-1", stock=-2))
+        assert response.status_code == 422
+
+    def test_rejects_boolean_price(self, client: TestClient) -> None:
+        response = client.post("/products", json=product_payload(price=True))
+        assert response.status_code == 422
+
+    def test_rejects_blank_title(self, client: TestClient) -> None:
+        response = client.post("/products", json=product_payload(title="   "))
         assert response.status_code == 422
 
 
 class TestListProducts:
     """Listing scenarios with visibility rules and filters."""
 
-    def test_lists_only_active_products_with_stock_by_default(
-        self, client: TestClient
-    ) -> None:
-        active = client.post("/products", json=product_payload(title="Visible Product"))
-        no_stock = client.post(
-            "/products",
-            json=product_payload(title="Out of Stock", stock=0),
-        )
-        inactive = client.post(
-            "/products",
-            json=product_payload(title="Disabled Product"),
-        )
-
-        inactive_id = inactive.json()["id"]
-        client.patch(f"/products/{inactive_id}/status", json={"status": "inactive"})
+    def test_hides_out_of_stock_products_by_default(self, client: TestClient) -> None:
+        client.post("/products", json=product_payload(title="Visible Product"))
+        client.post("/products", json=product_payload(title="Out of Stock", stock=0))
 
         response = client.get("/products")
 
         assert response.status_code == 200
         body = response.json()
-        titles = [item["title"] for item in body["items"]]
-        assert active.json()["title"] in titles
-        assert no_stock.json()["title"] not in titles
-        assert inactive.json()["title"] not in titles
+        titles = [item["title"] for item in body["data"]]
+        assert "Visible Product" in titles
+        assert "Out of Stock" not in titles
 
     def test_filters_by_category(self, client: TestClient) -> None:
-        client.post("/products", json=product_payload(title="Keyboard", category="peripherals"))
-        client.post("/products", json=product_payload(title="Chair", category="furniture"))
+        client.post(
+            "/products", json=product_payload(title="Keyboard", category="peripherals")
+        )
+        client.post(
+            "/products", json=product_payload(title="Chair", category="furniture")
+        )
 
         response = client.get("/products", params={"category": "peripherals"})
 
         assert response.status_code == 200
         body = response.json()
         assert body["total"] == 1
-        assert body["items"][0]["category"] == "peripherals"
+        assert body["data"][0]["category"] == "peripherals"
 
     def test_supports_pagination(self, client: TestClient) -> None:
         client.post("/products", json=product_payload(title="Product A"))
@@ -91,7 +90,7 @@ class TestListProducts:
         body = response.json()
         assert body["limit"] == 2
         assert body["offset"] == 1
-        assert len(body["items"]) == 2
+        assert len(body["data"]) == 2
 
     def test_searches_by_title_before_description(self, client: TestClient) -> None:
         client.post(
@@ -114,8 +113,8 @@ class TestListProducts:
         assert response.status_code == 200
         body = response.json()
         assert body["total"] == 2
-        assert body["items"][0]["title"] == "Gaming Mouse"
-        assert body["items"][1]["title"] == "Keyboard"
+        assert body["data"][0]["title"] == "Gaming Mouse"
+        assert body["data"][1]["title"] == "Keyboard"
 
     def test_searches_by_description(self, client: TestClient) -> None:
         client.post(
@@ -131,9 +130,11 @@ class TestListProducts:
         assert response.status_code == 200
         body = response.json()
         assert body["total"] == 1
-        assert body["items"][0]["title"] == "Desk Lamp"
+        assert body["data"][0]["title"] == "Desk Lamp"
 
-    def test_search_without_results_returns_empty_list(self, client: TestClient) -> None:
+    def test_search_without_results_returns_empty_list(
+        self, client: TestClient
+    ) -> None:
         client.post("/products", json=product_payload())
 
         response = client.get("/products", params={"search_query": "nonexistent"})
@@ -141,36 +142,89 @@ class TestListProducts:
         assert response.status_code == 200
         body = response.json()
         assert body["total"] == 0
-        assert body["items"] == []
+        assert body["data"] == []
 
-    def test_search_hides_inactive_and_out_of_stock_products(
+    def test_filters_by_seller_id(self, client: TestClient) -> None:
+        seller_a = str(uuid4())
+        seller_b = str(uuid4())
+        client.post(
+            "/products",
+            json=product_payload(title="Seller A Product", seller_id=seller_a),
+        )
+        client.post(
+            "/products",
+            json=product_payload(title="Seller B Product", seller_id=seller_b),
+        )
+
+        response = client.get("/products", params={"seller_id": seller_a})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 1
+        assert body["data"][0]["title"] == "Seller A Product"
+
+    def test_lists_all_products_including_inactive(self, client: TestClient) -> None:
+        client.post("/products", json=product_payload(title="Active Product"))
+        inactive = client.post(
+            "/products", json=product_payload(title="Inactive Product")
+        )
+        inactive_id = inactive.json()["data"]["id"]
+        client.patch(f"/products/{inactive_id}", json={"status": "inactive"})
+
+        response = client.get("/products", params={"include_inactive": "true"})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 2
+
+    def test_lists_inactive_with_category_filter(self, client: TestClient) -> None:
+        client.post(
+            "/products",
+            json=product_payload(title="Active Peripheral", category="peripherals"),
+        )
+        inactive = client.post(
+            "/products",
+            json=product_payload(title="Inactive Peripheral", category="peripherals"),
+        )
+        inactive_id = inactive.json()["data"]["id"]
+        client.patch(f"/products/{inactive_id}", json={"status": "inactive"})
+
+        response = client.get(
+            "/products",
+            params={"include_inactive": "true", "category": "peripherals"},
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 2
+
+    def test_search_with_blank_query_returns_all_active(
         self, client: TestClient
     ) -> None:
-        visible = client.post(
+        client.post("/products", json=product_payload(title="Product A"))
+        client.post("/products", json=product_payload(title="Product B"))
+
+        response = client.get("/products", params={"search_query": " "})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 2
+
+    def test_search_hides_out_of_stock_products(self, client: TestClient) -> None:
+        client.post(
             "/products",
             json=product_payload(
-                title="Searchable Camera",
+                title="Available Camera",
                 description="A camera for travel",
             ),
         )
         client.post(
             "/products",
             json=product_payload(
-                title="Searchable Camera No Stock",
+                title="Out of Stock Camera",
                 description="A camera for travel",
                 stock=0,
             ),
-        )
-        inactive = client.post(
-            "/products",
-            json=product_payload(
-                title="Searchable Camera Disabled",
-                description="A camera for travel",
-            ),
-        )
-        client.patch(
-            f"/products/{inactive.json()['id']}/status",
-            json={"status": "inactive"},
         )
 
         response = client.get("/products", params={"search_query": "camera"})
@@ -178,54 +232,29 @@ class TestListProducts:
         assert response.status_code == 200
         body = response.json()
         assert body["total"] == 1
-        assert [item["id"] for item in body["items"]] == [visible.json()["id"]]
+        assert body["data"][0]["title"] == "Available Camera"
 
 
 class TestProductDetail:
     """Single-product retrieval scenarios."""
 
-    def test_returns_active_product_detail_even_without_stock(
-        self, client: TestClient
-    ) -> None:
+    def test_returns_product_detail(self, client: TestClient) -> None:
         create_response = client.post(
             "/products",
             json=product_payload(title="Rare Item", stock=0),
         )
-
-        product_id = create_response.json()["id"]
-        response = client.get(f"/products/{product_id}")
-
-        assert response.status_code == 200
-        assert response.json()["stock"] == 0
-
-    def test_hides_inactive_product_detail_by_default(
-        self, client: TestClient
-    ) -> None:
-        create_response = client.post("/products", json=product_payload())
-        product_id = create_response.json()["id"]
-        client.patch(f"/products/{product_id}/status", json={"status": "inactive"})
+        product_id = create_response.json()["data"]["id"]
 
         response = client.get(f"/products/{product_id}")
 
-        assert response.status_code == 404
-
-    def test_can_include_inactive_product_detail_for_management_view(
-        self, client: TestClient
-    ) -> None:
-        create_response = client.post("/products", json=product_payload())
-        product_id = create_response.json()["id"]
-        client.patch(f"/products/{product_id}/status", json={"status": "inactive"})
-
-        response = client.get(
-            f"/products/{product_id}",
-            params={"include_inactive": "true"},
-        )
-
         assert response.status_code == 200
-        assert response.json()["status"] == "inactive"
+        data = response.json()["data"]
+        assert data["title"] == "Rare Item"
+        assert data["stock"] == 0
 
     def test_returns_404_for_nonexistent_product(self, client: TestClient) -> None:
         product_id = uuid4()
+
         response = client.get(f"/products/{product_id}")
 
         assert response.status_code == 404
@@ -238,40 +267,109 @@ class TestProductDetail:
 
 
 class TestUpdateProduct:
-    """Update scenarios for full resource replacement and status changes."""
+    """Partial update scenarios for products."""
 
-    def test_updates_product_fields(self, client: TestClient) -> None:
+    def test_updates_title(self, client: TestClient) -> None:
         create_response = client.post("/products", json=product_payload())
-        product_id = create_response.json()["id"]
+        product_id = create_response.json()["data"]["id"]
 
-        response = client.put(
+        response = client.patch(
             f"/products/{product_id}",
-            json=product_payload(
-                title="Updated Keyboard",
-                price="149.99",
-                stock=5,
-                category="office",
-            ),
+            json={"title": "Updated Keyboard"},
         )
 
         assert response.status_code == 200
-        body = response.json()
-        assert body["title"] == "Updated Keyboard"
-        assert body["price"] == "149.99"
-        assert body["stock"] == 5
-        assert body["category"] == "office"
+        data = response.json()["data"]
+        assert data["title"] == "Updated Keyboard"
+        assert data["category"] == "peripherals"
 
-    def test_disables_product(self, client: TestClient) -> None:
+    def test_updates_price_and_stock(self, client: TestClient) -> None:
         create_response = client.post("/products", json=product_payload())
-        product_id = create_response.json()["id"]
+        product_id = create_response.json()["data"]["id"]
 
         response = client.patch(
-            f"/products/{product_id}/status",
+            f"/products/{product_id}",
+            json={"price": 99.99, "stock": 3},
+        )
+
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["price"] == 99.99
+        assert data["stock"] == 3
+
+    def test_updates_category_normalizes_to_lowercase(self, client: TestClient) -> None:
+        create_response = client.post("/products", json=product_payload())
+        product_id = create_response.json()["data"]["id"]
+
+        response = client.patch(
+            f"/products/{product_id}",
+            json={"category": "Office Supplies"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["data"]["category"] == "office supplies"
+
+    def test_deactivates_product(self, client: TestClient) -> None:
+        create_response = client.post("/products", json=product_payload())
+        product_id = create_response.json()["data"]["id"]
+
+        response = client.patch(
+            f"/products/{product_id}",
             json={"status": "inactive"},
         )
 
         assert response.status_code == 200
-        assert response.json()["status"] == "inactive"
+        assert response.json()["data"]["status"] == "inactive"
 
         list_response = client.get("/products")
-        assert product_id not in {item["id"] for item in list_response.json()["items"]}
+        ids = [item["id"] for item in list_response.json()["data"]]
+        assert product_id not in ids
+
+    def test_reactivates_product(self, client: TestClient) -> None:
+        create_response = client.post("/products", json=product_payload())
+        product_id = create_response.json()["data"]["id"]
+
+        client.patch(f"/products/{product_id}", json={"status": "inactive"})
+        response = client.patch(f"/products/{product_id}", json={"status": "active"})
+
+        assert response.status_code == 200
+        assert response.json()["data"]["status"] == "active"
+
+        list_response = client.get("/products")
+        ids = [item["id"] for item in list_response.json()["data"]]
+        assert product_id in ids
+
+    def test_returns_404_for_nonexistent_product(self, client: TestClient) -> None:
+        product_id = uuid4()
+
+        response = client.patch(
+            f"/products/{product_id}",
+            json={"title": "Ghost"},
+        )
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Product not found"
+
+    def test_rejects_invalid_price(self, client: TestClient) -> None:
+        create_response = client.post("/products", json=product_payload())
+        product_id = create_response.json()["data"]["id"]
+
+        response = client.patch(f"/products/{product_id}", json={"price": -10})
+
+        assert response.status_code == 422
+
+    def test_rejects_blank_title(self, client: TestClient) -> None:
+        create_response = client.post("/products", json=product_payload())
+        product_id = create_response.json()["data"]["id"]
+
+        response = client.patch(f"/products/{product_id}", json={"title": "   "})
+
+        assert response.status_code == 422
+
+    def test_rejects_boolean_price(self, client: TestClient) -> None:
+        create_response = client.post("/products", json=product_payload())
+        product_id = create_response.json()["data"]["id"]
+
+        response = client.patch(f"/products/{product_id}", json={"price": True})
+
+        assert response.status_code == 422
