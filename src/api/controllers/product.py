@@ -38,7 +38,7 @@ class ProductController:
     async def create_product(self, payload: ProductCreateRequest) -> ProductResponse:
         dto = CreateProductDTO(**payload.model_dump())
         product = self.service.create_product(dto)
-        return ProductResponse.model_validate(product)
+        return ProductResponse(data=product)
 
     async def get_products(self, filters: ProductListRequest) -> ProductListResponse:
         dto = ProductFilterDTO(
@@ -54,16 +54,9 @@ class ProductController:
             data=products, total=total, limit=dto.limit, offset=dto.offset
         )
 
-    async def get_product(
-        self,
-        product_id: UUID,
-        *,
-        include_inactive: bool = False,
-    ) -> ProductResponse:
-        product = self.service.get_product(
-            product_id, include_inactive=include_inactive
-        )
-        return ProductResponse.model_validate(product)
+    async def get_product(self, product_id: UUID) -> ProductResponse:
+        product = self.service.get_product(product_id)
+        return ProductResponse(data=product)
 
     async def update_product(
         self,
@@ -72,7 +65,7 @@ class ProductController:
     ) -> ProductResponse:
         dto = UpdateProductDTO(**payload.model_dump())
         product = self.service.update_product(product_id, dto)
-        return ProductResponse.model_validate(product)
+        return ProductResponse(data=product)
 
     async def update_product_status(
         self,
@@ -81,4 +74,4 @@ class ProductController:
     ) -> ProductResponse:
         dto = UpdateProductStatusDTO(**payload.model_dump())
         product = self.service.update_product_status(product_id, dto)
-        return ProductResponse.model_validate(product)
+        return ProductResponse(data=product)

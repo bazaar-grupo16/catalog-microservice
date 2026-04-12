@@ -32,16 +32,9 @@ class ProductService:
         """Return a paginated product list following public visibility rules."""
         return self.repository.find_all(filters)
 
-    def get_product(
-        self,
-        product_id: UUID,
-        *,
-        include_inactive: bool = False,
-    ) -> Product:
-        """Fetch a single product, optionally including inactive ones."""
-        product = self.repository.find_by_id(
-            product_id, include_inactive=include_inactive
-        )
+    def get_product(self, product_id: UUID) -> Product:
+        """Fetch a single product details."""
+        product = self.repository.find_by_id(product_id, include_inactive=True)
         if product is None:
             raise ProductNotFound(product_id)
         return product

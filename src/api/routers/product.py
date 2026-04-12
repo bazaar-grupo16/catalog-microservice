@@ -66,20 +66,14 @@ async def get_products(
 @router.get(
     "/{id}",
     response_model=ProductResponse,
-    summary="Get product detail",
-    description=(
-        "Returns one product. Inactive products are hidden by default and return 404 "
-        "unless include_inactive=true is provided."
-    ),
+    summary="Retrieve a product by ID",
+    description="Returns one product details.",
 )
 async def get_product(
     id: UUID,
     db: DbSession,
-    include_inactive: bool = False,
 ) -> ProductResponse:
-    return await ProductController(db).get_product(
-        id, include_inactive=include_inactive
-    )
+    return await ProductController(db).get_product(id)
 
 
 @router.put(
