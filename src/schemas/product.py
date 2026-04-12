@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Query
+from fastapi import Form, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from src.core.enums import ProductSortBy, ProductStatus, SortOrder
@@ -31,6 +31,7 @@ class Product(BaseModel):
     status: ProductStatus
     created_at: datetime = Field(serialization_alias="createdAt")
     updated_at: datetime = Field(serialization_alias="updatedAt")
+    images: list[str] = []
 
 
 class ProductResponse(BaseModel):
@@ -66,35 +67,6 @@ class ProductListResponse(BaseModel):
     offset: int
 
 
-class ProductCreateRequest(BaseModel):
-    title: NonEmptyText
-    description: NonEmptyText
-    price: NonNegativePrice
-    stock: NonNegativeStock
-    category: NonEmptyText
-    seller_id: UUID = Field(serialization_alias="sellerId")
-
-    @field_validator("seller_id", "price", mode="before")
-    @classmethod
-    def reject_booleans(cls, v):
-        if isinstance(v, bool):
-            raise ValueError("Must be a number, not a boolean")
-        return v
-
-    @field_validator("title", "description", "category")
-    @classmethod
-    def reject_empty_strings(cls, v):
-        if not v.strip():
-            raise ValueError("Must not be empty or blank")
-        return v
-
-    @field_validator("category")
-    @classmethod
-    def normalize_category(cls, value: str) -> str:
-        """Store categories in a normalized lowercase form."""
-        return value.lower()
-
-
 class ProductUpdateRequest(BaseModel):
     title: NonEmptyText | None = None
     description: NonEmptyText | None = None
@@ -121,3 +93,46 @@ class ProductUpdateRequest(BaseModel):
     @classmethod
     def normalize_category(cls, value: str | None) -> str | None:
         return value.lower() if value is not None else None
+
+
+class ProductCreateForm:
+    """Multipart form dependency for product creation.
+
+    Follows the same ``__init__``-based pattern as ``ProductListRequest``
+    so FastAPI injects it via ``Depends()``.  Validates and normalises
+    the incoming form fields before they reach the controller.
+    """
+
+    def __init__(
+        self,
+        title: Annotated[str, Form(min_length=1, max_length=150)],
+        description: Annotated[str, Form(min_length=1)],
+        price: Annotated[float, Form(ge=0.01)],
+        stock: Annotated[int, Form(ge=0)],
+        category: Annotated[str, Form(min_length=1, max_length=80)],
+        seller_id: Annotated[UUID, Form()],
+    ) -> None:
+        for field, value in [
+            ("title", title),
+            ("description", description),
+            ("category", category),
+        ]:
+            if not value.strip():
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"{field} must not be blank",
+                )
+        self.title = title
+        self.description = description
+        self.price = price
+        self.stock = stock
+        self.category = category.strip().lower()
+        self.seller_id = seller_id
+
+
+class DeleteImagesRequest(BaseModel):
+    urls: list[str] = Field(min_length=1)
+
+
+class ReorderImagesRequest(BaseModel):
+    urls: list[str] = Field(min_length=1)

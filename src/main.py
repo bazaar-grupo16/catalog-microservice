@@ -11,15 +11,14 @@ import logging
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI
 
+from src.api.exception_handlers import register_exception_handlers
 from src.api.health import router as health_router
 from src.api.routers.product import router as products_router
 from src.core.config import get_settings
 from src.core.database import Base, engine, wait_for_db
 from src.core.logging import setup_logging
-from src.exceptions import ProductNotFound
 from src.models import Product  # noqa: F401
 
 
@@ -53,18 +52,4 @@ app.include_router(products_router)
 
 
 # ── Exception handlers ────────────────────────────────
-@app.exception_handler(ProductNotFound)
-async def product_not_found_handler(
-    request: Request, exc: ProductNotFound
-) -> JSONResponse:
-    return JSONResponse(
-        status_code=404,
-        content={
-            "type": "about:blank",
-            "title": "Not Found",
-            "status": 404,
-            "detail": "Product not found",
-            "instance": request.url.path,
-        },
-        media_type="application/problem+json",
-    )
+register_exception_handlers(app)
