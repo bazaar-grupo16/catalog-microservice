@@ -10,8 +10,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application source and tests.
+# Copy application source, tests, and project config.
+COPY pyproject.toml .
 COPY src/ ./src/
 COPY tests/ ./tests/
 
-CMD ["pytest", "tests/", "-v", "--tb=short"]
+CMD ["pytest", "-v", "--tb=short"]
