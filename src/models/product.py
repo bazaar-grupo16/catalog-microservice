@@ -31,7 +31,9 @@ class Product(Base):
     price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     stock: Mapped[int] = mapped_column(nullable=False)
     category: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
-    seller_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False, index=True)
+    seller_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), nullable=False, index=True
+    )
     status: Mapped[str] = mapped_column(
         String(20),
         nullable=False,

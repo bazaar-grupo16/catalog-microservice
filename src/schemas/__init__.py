@@ -1,18 +1,20 @@
 """API schemas exposed by the catalog service."""
 
 from src.schemas.product import (
-    ProductCreate,
     ProductListResponse,
     ProductResponse,
-    ProductStatusUpdate,
-    ProductUpdate,
+    ProductCreateRequest,
+    ProductStatusUpdateRequest,
+    ProductUpdateRequest,
 )
+from src.schemas.error import ErrorResponse
 
 
 __all__ = [
-    "ProductCreate",
     "ProductListResponse",
     "ProductResponse",
-    "ProductStatusUpdate",
-    "ProductUpdate",
+    "ProductCreateRequest",
+    "ProductStatusUpdateRequest",
+    "ProductUpdateRequest",
+    "ErrorResponse",
 ]

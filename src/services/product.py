@@ -50,7 +50,9 @@ class ProductService:
         include_inactive: bool = False,
     ) -> Product:
         """Fetch a single product, optionally including inactive ones."""
-        product = self.repository.find_by_id(product_id, include_inactive=include_inactive)
+        product = self.repository.find_by_id(
+            product_id, include_inactive=include_inactive
+        )
         if product is None:
             raise ProductNotFound(product_id)
         return product

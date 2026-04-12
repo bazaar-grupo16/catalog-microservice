@@ -54,7 +54,9 @@ app.include_router(products_router)
 
 # ── Exception handlers ────────────────────────────────
 @app.exception_handler(ProductNotFound)
-async def product_not_found_handler(request: Request, exc: ProductNotFound) -> JSONResponse:
+async def product_not_found_handler(
+    request: Request, exc: ProductNotFound
+) -> JSONResponse:
     return JSONResponse(
         status_code=404,
         content={
