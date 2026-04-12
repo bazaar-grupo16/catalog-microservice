@@ -81,3 +81,37 @@ def storage_mock():
 
     with patch("src.api.controllers.product.StorageService", return_value=mock):
         yield mock
+
+
+class _FakeInventory:
+    """In-memory inventory stub that mirrors what the real service would do.
+
+    Keeps a per-test stock registry so that stock values set during creation
+    or update are returned faithfully by the query methods.
+    """
+
+    def __init__(self) -> None:
+        self._stocks: dict = {}
+
+    def create_product_stock(self, product_id, initial_stock: int) -> None:
+        self._stocks[product_id] = initial_stock
+
+    def delete_product_stock(self, product_id) -> None:
+        self._stocks.pop(product_id, None)
+
+    def get_product_stock(self, product_id) -> int:
+        return self._stocks.get(product_id, 0)
+
+    def get_stocks(self, product_ids) -> dict:
+        return {pid: self._stocks.get(pid, 0) for pid in product_ids}
+
+    def update_product_stock(self, product_id, new_stock: int) -> None:
+        self._stocks[product_id] = new_stock
+
+
+@pytest.fixture(autouse=True)
+def inventory_mock():
+    """Patch InventoryService with a stateful fake for all tests."""
+    fake = _FakeInventory()
+    with patch("src.api.controllers.product.InventoryService", return_value=fake):
+        yield fake
