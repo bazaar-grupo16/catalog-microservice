@@ -2,36 +2,45 @@
 Product route registrations for the catalog microservice.
 """
 
-from __future__ import annotations
-
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Depends
 
 from src.api.controllers import ProductController
 from src.core.dependencies import DbSession
 from src.schemas import (
-    ProductCreate,
+    ProductCreateRequest,
+    ProductListRequest,
     ProductListResponse,
     ProductResponse,
-    ProductStatusUpdate,
-    ProductUpdate,
+    ProductStatusUpdateRequest,
+    ProductUpdateRequest,
+    ErrorResponse,
 )
 
 
-router = APIRouter(prefix="/products", tags=["Products"])
+router = APIRouter(
+    prefix="/products",
+    tags=["Products"],
+    responses={
+        400: {"description": "Bad request error", "model": ErrorResponse},
+    },
+)
 
 
 @router.post(
     "",
+    status_code=201,
+    summary="Create a new product",
     response_model=ProductResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Create product",
     description="Creates a new product publication in the catalog.",
+    responses={
+        201: {"description": "Product created successfully"},
+    },
 )
-async def create_product_endpoint(
-    payload: ProductCreate,
+async def create_product(
+    payload: ProductCreateRequest,
     db: DbSession,
 ) -> ProductResponse:
     return await ProductController(db).create_product(payload)
@@ -39,34 +48,23 @@ async def create_product_endpoint(
 
 @router.get(
     "",
+    summary="Retrieve all products",
     response_model=ProductListResponse,
-    summary="List products",
+    responses={200: {"description": "A list of products"}},
     description=(
         "Lists products using catalog visibility rules by default. "
         "Only active products with stock are returned unless include_inactive=true."
     ),
 )
-async def list_products_endpoint(
+async def get_products(
     db: DbSession,
-    limit: Annotated[int, Query(ge=1, le=100)] = 20,
-    offset: Annotated[int, Query(ge=0)] = 0,
-    search_query: str | None = Query(default=None, min_length=1),
-    category: str | None = Query(default=None, min_length=1, max_length=80),
-    seller_id: UUID | None = None,
-    include_inactive: bool = False,
+    filters: Annotated[ProductListRequest, Depends()],
 ) -> ProductListResponse:
-    return await ProductController(db).list_products(
-        limit=limit,
-        offset=offset,
-        search_query=search_query,
-        category=category,
-        seller_id=seller_id,
-        include_inactive=include_inactive,
-    )
+    return await ProductController(db).get_products(filters)
 
 
 @router.get(
-    "/{product_id}",
+    "/{id}",
     response_model=ProductResponse,
     summary="Get product detail",
     description=(
@@ -74,12 +72,14 @@ async def list_products_endpoint(
         "unless include_inactive=true is provided."
     ),
 )
-async def get_product_endpoint(
-    product_id: UUID,
+async def get_product(
+    id: UUID,
     db: DbSession,
     include_inactive: bool = False,
 ) -> ProductResponse:
-    return await ProductController(db).get_product(product_id, include_inactive=include_inactive)
+    return await ProductController(db).get_product(
+        id, include_inactive=include_inactive
+    )
 
 
 @router.put(
@@ -90,7 +90,7 @@ async def get_product_endpoint(
 )
 async def update_product_endpoint(
     product_id: UUID,
-    payload: ProductUpdate,
+    payload: ProductUpdateRequest,
     db: DbSession,
 ) -> ProductResponse:
     return await ProductController(db).update_product(product_id, payload)
@@ -104,7 +104,7 @@ async def update_product_endpoint(
 )
 async def update_product_status_endpoint(
     product_id: UUID,
-    payload: ProductStatusUpdate,
+    payload: ProductStatusUpdateRequest,
     db: DbSession,
 ) -> ProductResponse:
     return await ProductController(db).update_product_status(product_id, payload)

@@ -8,15 +8,20 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from src.dtos import CreateProductDTO, UpdateProductDTO, UpdateProductStatusDTO
+from src.dtos import (
+    CreateProductDTO,
+    ProductFilterDTO,
+    UpdateProductDTO,
+    UpdateProductStatusDTO,
+)
 from src.repositories import ProductRepository
 from src.schemas import (
+    ProductListRequest,
     ProductListResponse,
     ProductResponse,
     ProductCreateRequest,
     ProductStatusUpdateRequest,
     ProductUpdateRequest,
-    ProductStatusUpdateRequest,
 )
 from src.services import ProductService
 
@@ -35,26 +40,18 @@ class ProductController:
         product = self.service.create_product(dto)
         return ProductResponse.model_validate(product)
 
-    async def list_products(
-        self,
-        *,
-        limit: int,
-        offset: int,
-        search_query: str | None = None,
-        category: str | None = None,
-        seller_id: UUID | None = None,
-        include_inactive: bool = False,
-    ) -> ProductListResponse:
-        products, total = self.service.list_products(
-            limit=limit,
-            offset=offset,
-            search_query=search_query,
-            category=category,
-            seller_id=seller_id,
-            include_inactive=include_inactive,
+    async def get_products(self, filters: ProductListRequest) -> ProductListResponse:
+        dto = ProductFilterDTO(
+            limit=filters.limit,
+            offset=filters.offset,
+            search_query=filters.search_query,
+            category=filters.category,
+            seller_id=filters.seller_id,
+            include_inactive=filters.include_inactive,
         )
+        products, total = self.service.get_products(dto)
         return ProductListResponse(
-            items=products, total=total, limit=limit, offset=offset
+            data=products, total=total, limit=dto.limit, offset=dto.offset
         )
 
     async def get_product(
