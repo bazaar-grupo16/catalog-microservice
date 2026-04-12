@@ -147,8 +147,14 @@ class TestListProducts:
     def test_filters_by_seller_id(self, client: TestClient) -> None:
         seller_a = str(uuid4())
         seller_b = str(uuid4())
-        client.post("/products", json=product_payload(title="Seller A Product", seller_id=seller_a))
-        client.post("/products", json=product_payload(title="Seller B Product", seller_id=seller_b))
+        client.post(
+            "/products",
+            json=product_payload(title="Seller A Product", seller_id=seller_a),
+        )
+        client.post(
+            "/products",
+            json=product_payload(title="Seller B Product", seller_id=seller_b),
+        )
 
         response = client.get("/products", params={"seller_id": seller_a})
 
@@ -159,7 +165,9 @@ class TestListProducts:
 
     def test_lists_all_products_including_inactive(self, client: TestClient) -> None:
         client.post("/products", json=product_payload(title="Active Product"))
-        inactive = client.post("/products", json=product_payload(title="Inactive Product"))
+        inactive = client.post(
+            "/products", json=product_payload(title="Inactive Product")
+        )
         inactive_id = inactive.json()["data"]["id"]
         client.patch(f"/products/{inactive_id}", json={"status": "inactive"})
 
@@ -170,8 +178,14 @@ class TestListProducts:
         assert body["total"] == 2
 
     def test_lists_inactive_with_category_filter(self, client: TestClient) -> None:
-        client.post("/products", json=product_payload(title="Active Peripheral", category="peripherals"))
-        inactive = client.post("/products", json=product_payload(title="Inactive Peripheral", category="peripherals"))
+        client.post(
+            "/products",
+            json=product_payload(title="Active Peripheral", category="peripherals"),
+        )
+        inactive = client.post(
+            "/products",
+            json=product_payload(title="Inactive Peripheral", category="peripherals"),
+        )
         inactive_id = inactive.json()["data"]["id"]
         client.patch(f"/products/{inactive_id}", json={"status": "inactive"})
 
@@ -184,7 +198,9 @@ class TestListProducts:
         body = response.json()
         assert body["total"] == 2
 
-    def test_search_with_blank_query_returns_all_active(self, client: TestClient) -> None:
+    def test_search_with_blank_query_returns_all_active(
+        self, client: TestClient
+    ) -> None:
         client.post("/products", json=product_payload(title="Product A"))
         client.post("/products", json=product_payload(title="Product B"))
 
@@ -281,9 +297,7 @@ class TestUpdateProduct:
         assert data["price"] == 99.99
         assert data["stock"] == 3
 
-    def test_updates_category_normalizes_to_lowercase(
-        self, client: TestClient
-    ) -> None:
+    def test_updates_category_normalizes_to_lowercase(self, client: TestClient) -> None:
         create_response = client.post("/products", json=product_payload())
         product_id = create_response.json()["data"]["id"]
 
