@@ -41,12 +41,10 @@ class ProductService:
     def __init__(
         self,
         product_repository: ProductRepository,
-        storage_service: StorageService | None = None,
+        storage_service: StorageService,
     ) -> None:
         self.repository = product_repository
-        self.storage = (
-            storage_service if storage_service is not None else StorageService()
-        )
+        self.storage = storage_service
 
     def create_product(
         self, dto: CreateProductDTO, images_dto: AddImagesDTO
