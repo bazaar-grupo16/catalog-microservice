@@ -81,6 +81,8 @@ spec:
                 secretKeyRef:
                   name: catalog-db-credentials
                   key: SPACES_CDN_ENDPOINT
+            - name: INVENTORY_SERVICE_URL
+              value: "http://inventory-service"
           # ── Probes ─────────────────────────────────
           livenessProbe:
             httpGet:
