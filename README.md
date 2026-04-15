@@ -294,6 +294,8 @@ El campo `stock` no se almacena en la base de datos del catalog. En cambio, `Inv
 | `PATCH /products/{id}` (con `stock`) | Delega la actualización de stock a inventory |
 | `DELETE /products/{id}` | Elimina el producto de catalog y llama a inventory para eliminar su entrada de stock |
 
-**Estado actual:** `InventoryService` es un stub que retorna valores hardcodeados mientras el inventory service está siendo implementado. Para reemplazarlo por llamadas HTTP reales, solo hay que modificar `src/services/inventory.py` sin tocar el resto del código.
+**Relacion con el servicio de inventario:** `InventoryService` es un cliente HTTP real del microservicio privado de inventory y usa `INVENTORY_SERVICE_URL` como URL base.
+
+El frontend NO consume inventory directamente. El cliente público debe seguir usando el gateway/Ingress de catalog, por ejemplo `http://bazaar.pib.ar/catalog`.
 
 **Variable de entorno:** `INVENTORY_SERVICE_URL` — URL base del inventory service (requerida cuando el stub sea reemplazado).

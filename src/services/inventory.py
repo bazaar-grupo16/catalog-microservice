@@ -38,7 +38,9 @@ class InventoryService:
             f"{self.base_url}/internal/products/{product_id}/stock",
         )
         response.raise_for_status()
-        return response.json()["quantity"]
+        body = response.json()
+        stock_data = body.get("data", body)
+        return stock_data["quantity"]
 
     def get_stocks(self, product_ids: list[UUID]) -> dict[UUID, int]:
         """Return stock levels for multiple products in a single call."""
