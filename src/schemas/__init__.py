@@ -1,6 +1,7 @@
 """API schemas exposed by the catalog service."""
 
 from src.schemas.product import (
+    BulkDeleteImageKeysRequest,
     DeleteImagesRequest,
     ProductCreateForm,
     ProductListRequest,
@@ -20,5 +21,6 @@ __all__ = [
     "ProductUpdateRequest",
     "DeleteImagesRequest",
     "ReorderImagesRequest",
+    "BulkDeleteImageKeysRequest",
     "ErrorResponse",
 ]

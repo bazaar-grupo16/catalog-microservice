@@ -11,7 +11,9 @@ from src.core.enums import ProductStatus
 from src.core.utils import utc_now
 from src.dtos import (
     AddImagesDTO,
+    BulkDeleteImagesByKeysDTO,
     CreateProductDTO,
+    DeleteImageByKeyDTO,
     DeleteImagesDTO,
     ImageFileDTO,
     ProductFilterDTO,
@@ -20,6 +22,7 @@ from src.dtos import (
 )
 from src.exceptions import (
     EmptyActiveProductImages,
+    ImageNotFound,
     ImageValidationError,
     InvalidImageURLs,
     ProductNotFound,
@@ -184,6 +187,57 @@ class ProductService:
             raise EmptyActiveProductImages()
 
         for url in dto.urls:
+            self.storage.delete(self.storage.url_to_key(url))
+
+        product.images = remaining
+        product.updated_at = utc_now()
+        return self._enrich_stock(self.repository.save(product))
+
+    def delete_image_by_key(self, product_id: UUID, dto: DeleteImageByKeyDTO) -> Product:
+        """Remove a single image by its storage key (filename) from a product."""
+        product = self.repository.find_by_id(product_id)
+        if product is None:
+            raise ProductNotFound(product_id)
+
+        matching_url = next(
+            (url for url in (product.images or []) if url.endswith(f"/{dto.image_key}")),
+            None,
+        )
+        if matching_url is None:
+            raise ImageNotFound([dto.image_key])
+
+        remaining = [url for url in (product.images or []) if url != matching_url]
+        if product.status == ProductStatus.ACTIVE.value and not remaining:
+            raise EmptyActiveProductImages()
+
+        self.storage.delete(self.storage.url_to_key(matching_url))
+        product.images = remaining
+        product.updated_at = utc_now()
+        return self._enrich_stock(self.repository.save(product))
+
+    def bulk_delete_images_by_keys(
+        self, product_id: UUID, dto: BulkDeleteImagesByKeysDTO
+    ) -> Product:
+        """Remove multiple images by their storage keys from a product."""
+        product = self.repository.find_by_id(product_id)
+        if product is None:
+            raise ProductNotFound(product_id)
+
+        current_images = list(product.images or [])
+        keys_to_urls: dict[str, str | None] = {
+            key: next((url for url in current_images if url.endswith(f"/{key}")), None)
+            for key in dto.image_keys
+        }
+        missing = [key for key, url in keys_to_urls.items() if url is None]
+        if missing:
+            raise ImageNotFound(missing)
+
+        urls_to_remove = {url for url in keys_to_urls.values() if url is not None}
+        remaining = [url for url in current_images if url not in urls_to_remove]
+        if product.status == ProductStatus.ACTIVE.value and not remaining:
+            raise EmptyActiveProductImages()
+
+        for url in urls_to_remove:
             self.storage.delete(self.storage.url_to_key(url))
 
         product.images = remaining
