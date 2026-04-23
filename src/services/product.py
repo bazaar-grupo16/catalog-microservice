@@ -128,6 +128,11 @@ class ProductService:
 
         if dto.stock is not None:
             self.inventory.update_product_stock(product_id, dto.stock)
+            if dto.status is None:
+                if dto.stock == 0 and product.status == ProductStatus.ACTIVE.value:
+                    product.status = ProductStatus.OUT_OF_STOCK.value
+                elif dto.stock > 0 and product.status == ProductStatus.OUT_OF_STOCK.value:
+                    product.status = ProductStatus.ACTIVE.value
 
         product = self.repository.save(product)
         return self._enrich_stock(product)
@@ -243,6 +248,26 @@ class ProductService:
         product.images = remaining
         product.updated_at = utc_now()
         return self._enrich_stock(self.repository.save(product))
+
+    def update_stock_status(self, product_id: UUID, has_stock: bool) -> Product:
+        """Update product status based on inventory availability (called by inventory service)."""
+        product = self.repository.find_by_id(product_id)
+        if product is None:
+            raise ProductNotFound(product_id)
+
+        if product.status == ProductStatus.INACTIVE.value:
+            return self._enrich_stock(product)
+
+        if not has_stock and product.status == ProductStatus.ACTIVE.value:
+            product.status = ProductStatus.OUT_OF_STOCK.value
+            product.updated_at = utc_now()
+            product = self.repository.save(product)
+        elif has_stock and product.status == ProductStatus.OUT_OF_STOCK.value:
+            product.status = ProductStatus.ACTIVE.value
+            product.updated_at = utc_now()
+            product = self.repository.save(product)
+
+        return self._enrich_stock(product)
 
     def reorder_images(self, product_id: UUID, dto: ReorderImagesDTO) -> Product:
         """Replace the images array with a new ordering of the same URLs."""
