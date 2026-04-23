@@ -12,7 +12,9 @@ from fastapi import UploadFile
 
 from src.dtos import (
     AddImagesDTO,
+    BulkDeleteImagesByKeysDTO,
     CreateProductDTO,
+    DeleteImageByKeyDTO,
     DeleteImagesDTO,
     ImageFileDTO,
     ProductFilterDTO,
@@ -23,6 +25,7 @@ from src.repositories import ProductRepository
 from src.services.inventory import InventoryService
 from src.services.storage import StorageService
 from src.schemas import (
+    BulkDeleteImageKeysRequest,
     DeleteImagesRequest,
     ProductCreateForm,
     ProductListRequest,
@@ -116,5 +119,21 @@ class ProductController:
     ) -> ProductResponse:
         product = self.service.reorder_images(
             product_id, ReorderImagesDTO(urls=payload.urls)
+        )
+        return ProductResponse(data=product)
+
+    async def delete_image_by_key(
+        self, product_id: UUID, image_key: str
+    ) -> ProductResponse:
+        product = self.service.delete_image_by_key(
+            product_id, DeleteImageByKeyDTO(image_key=image_key)
+        )
+        return ProductResponse(data=product)
+
+    async def bulk_delete_images_by_keys(
+        self, product_id: UUID, payload: BulkDeleteImageKeysRequest
+    ) -> ProductResponse:
+        product = self.service.bulk_delete_images_by_keys(
+            product_id, BulkDeleteImagesByKeysDTO(image_keys=payload.image_keys)
         )
         return ProductResponse(data=product)

@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, File, Response, UploadFile
 from src.api.controllers import ProductController
 from src.core.dependencies import DbSession
 from src.schemas import (
+    BulkDeleteImageKeysRequest,
     DeleteImagesRequest,
     ProductCreateForm,
     ProductListRequest,
@@ -171,6 +172,64 @@ async def delete_images(
     db: DbSession,
 ) -> ProductResponse:
     return await ProductController(db).delete_images(id, payload)
+
+
+@router.delete(
+    "/{product_id}/images/bulk",
+    response_model=ProductResponse,
+    summary="Bulk delete product images by key",
+    description=(
+        "Deletes one or more images by storage key from the product and from storage. "
+        "All keys must belong to the product. "
+        "Active products cannot be left with zero images."
+    ),
+    responses={
+        200: {"description": "Images deleted and product returned"},
+        404: {
+            "description": "Product or one or more image keys not found",
+            "model": ErrorResponse,
+        },
+        409: {
+            "description": "Would leave active product with no images",
+            "model": ErrorResponse,
+        },
+    },
+)
+async def bulk_delete_images(
+    product_id: UUID,
+    payload: BulkDeleteImageKeysRequest,
+    db: DbSession,
+) -> ProductResponse:
+    return await ProductController(db).bulk_delete_images_by_keys(product_id, payload)
+
+
+@router.delete(
+    "/{product_id}/images/{image_key}",
+    response_model=ProductResponse,
+    summary="Delete a product image by key",
+    description=(
+        "Deletes a single image identified by its storage key (filename in the bucket) "
+        "from the product and from storage. "
+        "Active products cannot be left with zero images."
+    ),
+    responses={
+        200: {"description": "Image deleted and product returned"},
+        404: {
+            "description": "Product or image key not found",
+            "model": ErrorResponse,
+        },
+        409: {
+            "description": "Would leave active product with no images",
+            "model": ErrorResponse,
+        },
+    },
+)
+async def delete_image_by_key(
+    product_id: UUID,
+    image_key: str,
+    db: DbSession,
+) -> ProductResponse:
+    return await ProductController(db).delete_image_by_key(product_id, image_key)
 
 
 @router.patch(
