@@ -63,3 +63,13 @@ class DeleteImagesDTO:
 @dataclass
 class ReorderImagesDTO:
     urls: list[str]
+
+
+@dataclass
+class DeleteImageByKeyDTO:
+    image_key: str
+
+
+@dataclass
+class BulkDeleteImagesByKeysDTO:
+    image_keys: list[str]
