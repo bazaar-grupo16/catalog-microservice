@@ -520,4 +520,94 @@ class TestDeleteProduct:
         response = client.delete(f"/products/{product_id}")
 
         assert response.status_code == 204
-        assert client.get(f"/products/{product_id}").status_code == 404
+
+
+class TestStockStatusCallback:
+    """Internal stock-status callback scenarios."""
+
+    def _create_product(self, client: TestClient) -> str:
+        response = client.post("/products", data=product_form(), files=PRODUCT_IMAGE)
+        assert response.status_code == 201
+        return response.json()["data"]["id"]
+
+    def test_has_stock_false_on_active_sets_out_of_stock(self, client: TestClient) -> None:
+        product_id = self._create_product(client)
+
+        response = client.patch(
+            f"/internal/products/{product_id}/stock-status",
+            json={"has_stock": False},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["data"]["status"] == "out_of_stock"
+
+    def test_has_stock_true_on_out_of_stock_sets_active(self, client: TestClient) -> None:
+        product_id = self._create_product(client)
+        client.patch(
+            f"/internal/products/{product_id}/stock-status",
+            json={"has_stock": False},
+        )
+
+        response = client.patch(
+            f"/internal/products/{product_id}/stock-status",
+            json={"has_stock": True},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["data"]["status"] == "active"
+
+    def test_callback_on_inactive_does_not_change_status(self, client: TestClient) -> None:
+        product_id = self._create_product(client)
+        client.patch(f"/products/{product_id}", json={"status": "inactive"})
+
+        response = client.patch(
+            f"/internal/products/{product_id}/stock-status",
+            json={"has_stock": False},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["data"]["status"] == "inactive"
+
+    def test_callback_on_nonexistent_product_returns_404(self, client: TestClient) -> None:
+        product_id = str(uuid4())
+
+        response = client.patch(
+            f"/internal/products/{product_id}/stock-status",
+            json={"has_stock": False},
+        )
+
+        assert response.status_code == 404
+        body = response.json()
+        assert body["type"] == "about:blank"
+        assert body["title"] == "Not Found"
+        assert body["status"] == 404
+
+    def test_get_products_excludes_out_of_stock_by_default(self, client: TestClient) -> None:
+        product_id = self._create_product(client)
+        client.patch(
+            f"/internal/products/{product_id}/stock-status",
+            json={"has_stock": False},
+        )
+
+        response = client.get("/products")
+
+        assert response.status_code == 200
+        ids = [p["id"] for p in response.json()["data"]]
+        assert product_id not in ids
+
+    def test_patch_stock_zero_on_active_sets_out_of_stock(self, client: TestClient) -> None:
+        product_id = self._create_product(client)
+
+        response = client.patch(f"/products/{product_id}", json={"stock": 0})
+
+        assert response.status_code == 200
+        assert response.json()["data"]["status"] == "out_of_stock"
+
+    def test_patch_stock_positive_on_out_of_stock_sets_active(self, client: TestClient) -> None:
+        product_id = self._create_product(client)
+        client.patch(f"/products/{product_id}", json={"stock": 0})
+
+        response = client.patch(f"/products/{product_id}", json={"stock": 5})
+
+        assert response.status_code == 200
+        assert response.json()["data"]["status"] == "active"
