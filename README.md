@@ -192,9 +192,9 @@ Solo se modifican los campos presentes en el body. Si se incluye `stock`, el cam
 | `title` | string | 1–150 caracteres, no vacío |
 | `description` | string | 1–150 caracteres, no vacío |
 | `price` | float | ≥ 0.01 |
-| `stock` | int | ≥ 0 — se actualiza en el inventory service |
+| `stock` | int | ≥ 0 — se actualiza en el inventory service; si pasa a 0 el producto queda `out_of_stock`, si vuelve a ser > 0 desde `out_of_stock` queda `active` |
 | `category` | string | 1–150 caracteres (se normaliza a minúsculas) |
-| `status` | `active` \| `inactive` | — |
+| `status` | `active` \| `inactive` \| `out_of_stock` | Los cambios manuales de status tienen precedencia sobre la sincronización automática |
 
 **Respuesta `200`:** objeto `ProductResponse` con los datos actualizados.  
 **Respuesta `404`:** error en formato `application/problem+json` si el producto no existe.
@@ -266,6 +266,34 @@ Todos los keys deben pertenecer al producto; si alguno no existe, se rechaza tod
 Debe contener exactamente las mismas URLs que el producto, en el nuevo orden deseado.
 
 **Respuesta `200`:** objeto `ProductResponse` con el nuevo orden de imágenes.
+
+---
+
+---
+
+### Endpoints internos
+
+Estos endpoints son accesibles **únicamente dentro del cluster de Kubernetes**. El Ingress de Nginx no los expone al exterior.
+
+#### `PATCH /internal/products/{product_id}/stock-status` — Callback de disponibilidad desde inventory
+
+Llamado por el inventory-microservice cuando el stock de un producto cambia de/a cero.
+
+**Body JSON:**
+```json
+{ "has_stock": false }
+```
+
+Comportamiento según el status actual del producto:
+
+| Status actual | `has_stock` | Resultado |
+|---|---|---|
+| `active` | `false` | → `out_of_stock` |
+| `out_of_stock` | `true` | → `active` |
+| `inactive` | cualquiera | sin cambio (tiene precedencia del vendedor) |
+
+**Respuesta `200`:** objeto `ProductResponse` con el status actualizado.  
+**Respuesta `404`:** si el producto no existe.
 
 ---
 
