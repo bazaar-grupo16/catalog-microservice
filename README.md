@@ -43,7 +43,7 @@ Microservicio de catálogo de productos para la plataforma Bazaar. Expone una AP
 │   │   └── utils.py            # Funciones utilitarias (utc_now)
 │   ├── dtos.py                 # Data Transfer Objects internos (dataclasses sin validación)
 │   ├── exceptions/             # Excepciones de dominio
-│   │   └── product.py          # ProductNotFound
+│   │   └── product.py          # ProductNotFound, ImageNotFound, ImageValidationError, etc.
 │   ├── models/                 # Entidades SQLAlchemy
 │   │   └── product.py          # Product (ORM)
 │   ├── repositories/           # Acceso a datos — único lugar que usa Session
@@ -59,7 +59,8 @@ Microservicio de catálogo de productos para la plataforma Bazaar. Expone una AP
 ├── tests/
 │   ├── conftest.py
 │   ├── test_health.py
-│   └── test_products.py
+│   ├── test_products.py
+│   └── test_images.py
 ├── scripts/
 │   ├── run_tests.sh            # Wrapper para correr tests (Linux/macOS)
 │   └── run_tests.ps1           # Wrapper para correr tests (Windows)
@@ -226,6 +227,32 @@ Elimina el producto de catalog, borra sus imágenes de DigitalOcean Spaces y eli
 No se pueden eliminar todas las imágenes de un producto activo.
 
 **Respuesta `200`:** objeto `ProductResponse` con el array `images` actualizado.  
+**Respuesta `409`:** si la operación dejaría el producto activo sin imágenes.
+
+---
+
+#### `DELETE /products/{product_id}/images/{image_key}` — Eliminar imagen por key
+
+Elimina una imagen identificada por su nombre de archivo en el bucket (el último segmento de la URL CDN, ej: `abc123.webp`).
+
+**Respuesta `200`:** objeto `ProductResponse` con el array `images` actualizado.  
+**Respuesta `404`:** si el producto no existe o el key no pertenece al producto.  
+**Respuesta `409`:** si la operación dejaría el producto activo sin imágenes.
+
+---
+
+#### `DELETE /products/{product_id}/images/bulk` — Eliminar imágenes por keys (bulk)
+
+Elimina múltiples imágenes a partir de sus storage keys en una sola operación atómica.
+
+**Body JSON:**
+```json
+{ "image_keys": ["abc123.webp", "def456.jpg"] }
+```
+Todos los keys deben pertenecer al producto; si alguno no existe, se rechaza toda la operación.
+
+**Respuesta `200`:** objeto `ProductResponse` con el array `images` actualizado.  
+**Respuesta `404`:** si el producto no existe o alguno de los keys no pertenece al producto (el detalle lista los keys faltantes).  
 **Respuesta `409`:** si la operación dejaría el producto activo sin imágenes.
 
 ---
