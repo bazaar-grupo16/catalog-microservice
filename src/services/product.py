@@ -11,7 +11,9 @@ from src.core.enums import ProductStatus
 from src.core.utils import utc_now
 from src.dtos import (
     AddImagesDTO,
+    BulkDeleteImagesByKeysDTO,
     CreateProductDTO,
+    DeleteImageByKeyDTO,
     DeleteImagesDTO,
     ImageFileDTO,
     ProductFilterDTO,
@@ -20,6 +22,7 @@ from src.dtos import (
 )
 from src.exceptions import (
     EmptyActiveProductImages,
+    ImageNotFound,
     ImageValidationError,
     InvalidImageURLs,
     ProductNotFound,
@@ -61,6 +64,11 @@ class ProductService:
             price=dto.price,
             category=dto.category,
             seller_id=dto.seller_id,
+            status=(
+                ProductStatus.OUT_OF_STOCK.value
+                if dto.stock == 0
+                else ProductStatus.ACTIVE.value
+            ),
         )
         product = self.repository.create(product)
 
@@ -125,6 +133,11 @@ class ProductService:
 
         if dto.stock is not None:
             self.inventory.update_product_stock(product_id, dto.stock)
+            if dto.status is None:
+                if dto.stock == 0 and product.status == ProductStatus.ACTIVE.value:
+                    product.status = ProductStatus.OUT_OF_STOCK.value
+                elif dto.stock > 0 and product.status == ProductStatus.OUT_OF_STOCK.value:
+                    product.status = ProductStatus.ACTIVE.value
 
         product = self.repository.save(product)
         return self._enrich_stock(product)
@@ -179,9 +192,7 @@ class ProductService:
 
         urls_to_remove = set(dto.urls)
         remaining = [url for url in (product.images or []) if url not in urls_to_remove]
-
-        if product.status == ProductStatus.ACTIVE.value and not remaining:
-            raise EmptyActiveProductImages()
+        self._ensure_product_keeps_images(remaining)
 
         for url in dto.urls:
             self.storage.delete(self.storage.url_to_key(url))
@@ -189,6 +200,75 @@ class ProductService:
         product.images = remaining
         product.updated_at = utc_now()
         return self._enrich_stock(self.repository.save(product))
+
+    def delete_image_by_key(self, product_id: UUID, dto: DeleteImageByKeyDTO) -> Product:
+        """Remove a single image by its storage key (filename) from a product."""
+        product = self.repository.find_by_id(product_id)
+        if product is None:
+            raise ProductNotFound(product_id)
+
+        matching_url = next(
+            (url for url in (product.images or []) if url.endswith(f"/{dto.image_key}")),
+            None,
+        )
+        if matching_url is None:
+            raise ImageNotFound([dto.image_key])
+
+        remaining = [url for url in (product.images or []) if url != matching_url]
+        self._ensure_product_keeps_images(remaining)
+
+        self.storage.delete(self.storage.url_to_key(matching_url))
+        product.images = remaining
+        product.updated_at = utc_now()
+        return self._enrich_stock(self.repository.save(product))
+
+    def bulk_delete_images_by_keys(
+        self, product_id: UUID, dto: BulkDeleteImagesByKeysDTO
+    ) -> Product:
+        """Remove multiple images by their storage keys from a product."""
+        product = self.repository.find_by_id(product_id)
+        if product is None:
+            raise ProductNotFound(product_id)
+
+        current_images = list(product.images or [])
+        keys_to_urls: dict[str, str | None] = {
+            key: next((url for url in current_images if url.endswith(f"/{key}")), None)
+            for key in dto.image_keys
+        }
+        missing = [key for key, url in keys_to_urls.items() if url is None]
+        if missing:
+            raise ImageNotFound(missing)
+
+        urls_to_remove = {url for url in keys_to_urls.values() if url is not None}
+        remaining = [url for url in current_images if url not in urls_to_remove]
+        self._ensure_product_keeps_images(remaining)
+
+        for url in urls_to_remove:
+            self.storage.delete(self.storage.url_to_key(url))
+
+        product.images = remaining
+        product.updated_at = utc_now()
+        return self._enrich_stock(self.repository.save(product))
+
+    def update_stock_status(self, product_id: UUID, has_stock: bool) -> Product:
+        """Update product status based on inventory availability (called by inventory service)."""
+        product = self.repository.find_by_id(product_id)
+        if product is None:
+            raise ProductNotFound(product_id)
+
+        if product.status == ProductStatus.INACTIVE.value:
+            return self._enrich_stock(product)
+
+        if not has_stock and product.status == ProductStatus.ACTIVE.value:
+            product.status = ProductStatus.OUT_OF_STOCK.value
+            product.updated_at = utc_now()
+            product = self.repository.save(product)
+        elif has_stock and product.status == ProductStatus.OUT_OF_STOCK.value:
+            product.status = ProductStatus.ACTIVE.value
+            product.updated_at = utc_now()
+            product = self.repository.save(product)
+
+        return self._enrich_stock(product)
 
     def reorder_images(self, product_id: UUID, dto: ReorderImagesDTO) -> Product:
         """Replace the images array with a new ordering of the same URLs."""
@@ -208,3 +288,8 @@ class ProductService:
         product.images = provided
         product.updated_at = utc_now()
         return self._enrich_stock(self.repository.save(product))
+
+    def _ensure_product_keeps_images(self, remaining: list[str]) -> None:
+        """Reject operations that would leave a product without any images."""
+        if not remaining:
+            raise EmptyActiveProductImages()

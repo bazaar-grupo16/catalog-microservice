@@ -79,7 +79,8 @@ def storage_mock():
     mock.url_to_key.side_effect = lambda url: url.removeprefix(f"{_CDN_BASE}/")
     mock.ext_for.side_effect = lambda ct: _MIME_TO_EXT[ct]
 
-    with patch("src.api.controllers.product.StorageService", return_value=mock):
+    with patch("src.api.controllers.product.StorageService", return_value=mock), \
+         patch("src.api.controllers.internal.StorageService", return_value=mock):
         yield mock
 
 
@@ -113,5 +114,6 @@ class _FakeInventory:
 def inventory_mock():
     """Patch InventoryService with a stateful fake for all tests."""
     fake = _FakeInventory()
-    with patch("src.api.controllers.product.InventoryService", return_value=fake):
+    with patch("src.api.controllers.product.InventoryService", return_value=fake), \
+         patch("src.api.controllers.internal.InventoryService", return_value=fake):
         yield fake

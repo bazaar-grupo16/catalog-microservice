@@ -39,6 +39,20 @@ class TestCreateProduct:
         assert len(data["images"]) == 1
         assert "id" in data
 
+    def test_creates_zero_stock_product_as_out_of_stock(
+        self, client: TestClient
+    ) -> None:
+        response = client.post(
+            "/products",
+            data=product_form(title="Sold Out Listing", stock="0"),
+            files=PRODUCT_IMAGE,
+        )
+
+        assert response.status_code == 201
+        data = response.json()["data"]
+        assert data["stock"] == 0
+        assert data["status"] == "out_of_stock"
+
     def test_rejects_invalid_payload(self, client: TestClient) -> None:
         response = client.post(
             "/products",
@@ -74,7 +88,7 @@ class TestCreateProduct:
 class TestListProducts:
     """Listing scenarios with visibility rules and filters."""
 
-    def test_returns_products_regardless_of_stock(self, client: TestClient) -> None:
+    def test_excludes_zero_stock_products_from_catalog(self, client: TestClient) -> None:
         client.post(
             "/products", data=product_form(title="Visible Product"), files=PRODUCT_IMAGE
         )
@@ -89,7 +103,7 @@ class TestListProducts:
         assert response.status_code == 200
         titles = [item["title"] for item in response.json()["data"]]
         assert "Visible Product" in titles
-        assert "Out of Stock" in titles
+        assert "Out of Stock" not in titles
 
     def test_filters_by_category(self, client: TestClient) -> None:
         client.post(
@@ -255,7 +269,7 @@ class TestListProducts:
         assert response.status_code == 200
         assert response.json()["total"] == 2
 
-    def test_search_returns_all_matching_products_regardless_of_stock(
+    def test_search_excludes_out_of_stock_products(
         self, client: TestClient
     ) -> None:
         client.post(
@@ -279,10 +293,10 @@ class TestListProducts:
 
         assert response.status_code == 200
         body = response.json()
-        assert body["total"] == 2
+        assert body["total"] == 1
         titles = [item["title"] for item in body["data"]]
         assert "Available Camera" in titles
-        assert "Out of Stock Camera" in titles
+        assert "Out of Stock Camera" not in titles
 
 
 class TestProductDetail:
@@ -302,6 +316,7 @@ class TestProductDetail:
         data = response.json()["data"]
         assert data["title"] == "Rare Item"
         assert data["stock"] == 0
+        assert data["status"] == "out_of_stock"
 
     def test_returns_404_for_nonexistent_product(self, client: TestClient) -> None:
         product_id = uuid4()
@@ -520,4 +535,94 @@ class TestDeleteProduct:
         response = client.delete(f"/products/{product_id}")
 
         assert response.status_code == 204
-        assert client.get(f"/products/{product_id}").status_code == 404
+
+
+class TestStockStatusCallback:
+    """Internal stock-status callback scenarios."""
+
+    def _create_product(self, client: TestClient) -> str:
+        response = client.post("/products", data=product_form(), files=PRODUCT_IMAGE)
+        assert response.status_code == 201
+        return response.json()["data"]["id"]
+
+    def test_has_stock_false_on_active_sets_out_of_stock(self, client: TestClient) -> None:
+        product_id = self._create_product(client)
+
+        response = client.patch(
+            f"/internal/products/{product_id}/stock-status",
+            json={"has_stock": False},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["data"]["status"] == "out_of_stock"
+
+    def test_has_stock_true_on_out_of_stock_sets_active(self, client: TestClient) -> None:
+        product_id = self._create_product(client)
+        client.patch(
+            f"/internal/products/{product_id}/stock-status",
+            json={"has_stock": False},
+        )
+
+        response = client.patch(
+            f"/internal/products/{product_id}/stock-status",
+            json={"has_stock": True},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["data"]["status"] == "active"
+
+    def test_callback_on_inactive_does_not_change_status(self, client: TestClient) -> None:
+        product_id = self._create_product(client)
+        client.patch(f"/products/{product_id}", json={"status": "inactive"})
+
+        response = client.patch(
+            f"/internal/products/{product_id}/stock-status",
+            json={"has_stock": False},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["data"]["status"] == "inactive"
+
+    def test_callback_on_nonexistent_product_returns_404(self, client: TestClient) -> None:
+        product_id = str(uuid4())
+
+        response = client.patch(
+            f"/internal/products/{product_id}/stock-status",
+            json={"has_stock": False},
+        )
+
+        assert response.status_code == 404
+        body = response.json()
+        assert body["type"] == "about:blank"
+        assert body["title"] == "Not Found"
+        assert body["status"] == 404
+
+    def test_get_products_excludes_out_of_stock_by_default(self, client: TestClient) -> None:
+        product_id = self._create_product(client)
+        client.patch(
+            f"/internal/products/{product_id}/stock-status",
+            json={"has_stock": False},
+        )
+
+        response = client.get("/products")
+
+        assert response.status_code == 200
+        ids = [p["id"] for p in response.json()["data"]]
+        assert product_id not in ids
+
+    def test_patch_stock_zero_on_active_sets_out_of_stock(self, client: TestClient) -> None:
+        product_id = self._create_product(client)
+
+        response = client.patch(f"/products/{product_id}", json={"stock": 0})
+
+        assert response.status_code == 200
+        assert response.json()["data"]["status"] == "out_of_stock"
+
+    def test_patch_stock_positive_on_out_of_stock_sets_active(self, client: TestClient) -> None:
+        product_id = self._create_product(client)
+        client.patch(f"/products/{product_id}", json={"stock": 0})
+
+        response = client.patch(f"/products/{product_id}", json={"stock": 5})
+
+        assert response.status_code == 200
+        assert response.json()["data"]["status"] == "active"
