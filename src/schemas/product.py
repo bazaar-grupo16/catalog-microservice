@@ -136,3 +136,11 @@ class DeleteImagesRequest(BaseModel):
 
 class ReorderImagesRequest(BaseModel):
     urls: list[str] = Field(min_length=1)
+
+
+class BulkDeleteImageKeysRequest(BaseModel):
+    image_keys: list[str] = Field(min_length=1)
+
+
+class StockStatusUpdateRequest(BaseModel):
+    has_stock: bool

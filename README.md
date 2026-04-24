@@ -43,7 +43,7 @@ Microservicio de catálogo de productos para la plataforma Bazaar. Expone una AP
 │   │   └── utils.py            # Funciones utilitarias (utc_now)
 │   ├── dtos.py                 # Data Transfer Objects internos (dataclasses sin validación)
 │   ├── exceptions/             # Excepciones de dominio
-│   │   └── product.py          # ProductNotFound
+│   │   └── product.py          # ProductNotFound, ImageNotFound, ImageValidationError, etc.
 │   ├── models/                 # Entidades SQLAlchemy
 │   │   └── product.py          # Product (ORM)
 │   ├── repositories/           # Acceso a datos — único lugar que usa Session
@@ -59,7 +59,8 @@ Microservicio de catálogo de productos para la plataforma Bazaar. Expone una AP
 ├── tests/
 │   ├── conftest.py
 │   ├── test_health.py
-│   └── test_products.py
+│   ├── test_products.py
+│   └── test_images.py
 ├── scripts/
 │   ├── run_tests.sh            # Wrapper para correr tests (Linux/macOS)
 │   └── run_tests.ps1           # Wrapper para correr tests (Windows)
@@ -124,6 +125,8 @@ Crea el producto en catalog y registra su stock inicial en el inventory service.
 | `seller_id` | UUID | — |
 | `files` | imágenes | Al menos una imagen (JPEG, PNG o WebP, máx. 10 MB c/u) |
 
+Si el producto se crea con `stock=0`, queda en estado `out_of_stock` desde el inicio. Si se crea con `stock>0`, queda `active`.
+
 **Respuesta `201`:**
 ```json
 {
@@ -146,7 +149,7 @@ Crea el producto en catalog y registra su stock inicial en el inventory service.
 
 #### `GET /products` — Listar productos
 
-Devuelve todos los productos activos. El campo `stock` de cada producto se obtiene del inventory service. Los productos con stock 0 se incluyen en los resultados — el frontend decide cómo mostrarlos visualmente.
+Devuelve los productos actualmente visibles en el catálogo público. El campo `stock` de cada producto se obtiene del inventory service. Los productos sin stock (`out_of_stock`) o deshabilitados (`inactive`) no se incluyen, salvo que se use `include_inactive=true`.
 
 **Query params:**
 
@@ -177,6 +180,8 @@ Devuelve todos los productos activos. El campo `stock` de cada producto se obtie
 
 El `stock` devuelto se consulta en tiempo real al inventory service.
 
+Un producto `out_of_stock` sigue siendo consultable por ID para mostrar su detalle, aunque no aparezca en el listado público.
+
 **Respuesta `200`:** objeto `ProductResponse` (mismo formato que al crear).  
 **Respuesta `404`:** error en formato `application/problem+json`.
 
@@ -191,9 +196,9 @@ Solo se modifican los campos presentes en el body. Si se incluye `stock`, el cam
 | `title` | string | 1–150 caracteres, no vacío |
 | `description` | string | 1–150 caracteres, no vacío |
 | `price` | float | ≥ 0.01 |
-| `stock` | int | ≥ 0 — se actualiza en el inventory service |
+| `stock` | int | ≥ 0 — se actualiza en el inventory service; si pasa a 0 el producto queda `out_of_stock`, si vuelve a ser > 0 desde `out_of_stock` queda `active` |
 | `category` | string | 1–150 caracteres (se normaliza a minúsculas) |
-| `status` | `active` \| `inactive` | — |
+| `status` | `active` \| `inactive` \| `out_of_stock` | Los cambios manuales de status tienen precedencia sobre la sincronización automática |
 
 **Respuesta `200`:** objeto `ProductResponse` con los datos actualizados.  
 **Respuesta `404`:** error en formato `application/problem+json` si el producto no existe.
@@ -223,10 +228,36 @@ Elimina el producto de catalog, borra sus imágenes de DigitalOcean Spaces y eli
 ```json
 { "urls": ["https://cdn.../imagen.jpg"] }
 ```
-No se pueden eliminar todas las imágenes de un producto activo.
+No se pueden eliminar todas las imágenes de un producto, independientemente de su status.
 
 **Respuesta `200`:** objeto `ProductResponse` con el array `images` actualizado.  
-**Respuesta `409`:** si la operación dejaría el producto activo sin imágenes.
+**Respuesta `409`:** si la operación dejaría al producto sin imágenes.
+
+---
+
+#### `DELETE /products/{product_id}/images/{image_key}` — Eliminar imagen por key
+
+Elimina una imagen identificada por su nombre de archivo en el bucket (el último segmento de la URL CDN, ej: `abc123.webp`).
+
+**Respuesta `200`:** objeto `ProductResponse` con el array `images` actualizado.  
+**Respuesta `404`:** si el producto no existe o el key no pertenece al producto.  
+**Respuesta `409`:** si la operación dejaría al producto sin imágenes.
+
+---
+
+#### `DELETE /products/{product_id}/images/bulk` — Eliminar imágenes por keys (bulk)
+
+Elimina múltiples imágenes a partir de sus storage keys en una sola operación atómica.
+
+**Body JSON:**
+```json
+{ "image_keys": ["abc123.webp", "def456.jpg"] }
+```
+Todos los keys deben pertenecer al producto; si alguno no existe, se rechaza toda la operación.
+
+**Respuesta `200`:** objeto `ProductResponse` con el array `images` actualizado.  
+**Respuesta `404`:** si el producto no existe o alguno de los keys no pertenece al producto (el detalle lista los keys faltantes).  
+**Respuesta `409`:** si la operación dejaría al producto sin imágenes.
 
 ---
 
@@ -239,6 +270,34 @@ No se pueden eliminar todas las imágenes de un producto activo.
 Debe contener exactamente las mismas URLs que el producto, en el nuevo orden deseado.
 
 **Respuesta `200`:** objeto `ProductResponse` con el nuevo orden de imágenes.
+
+---
+
+---
+
+### Endpoints internos
+
+Estos endpoints son accesibles **únicamente dentro del cluster de Kubernetes**. El Ingress de Nginx no los expone al exterior.
+
+#### `PATCH /internal/products/{product_id}/stock-status` — Callback de disponibilidad desde inventory
+
+Llamado por el inventory-microservice cuando el stock de un producto cambia de/a cero.
+
+**Body JSON:**
+```json
+{ "has_stock": false }
+```
+
+Comportamiento según el status actual del producto:
+
+| Status actual | `has_stock` | Resultado |
+|---|---|---|
+| `active` | `false` | → `out_of_stock` |
+| `out_of_stock` | `true` | → `active` |
+| `inactive` | cualquiera | sin cambio (tiene precedencia del vendedor) |
+
+**Respuesta `200`:** objeto `ProductResponse` con el status actualizado.  
+**Respuesta `404`:** si el producto no existe.
 
 ---
 
@@ -289,9 +348,9 @@ El campo `stock` no se almacena en la base de datos del catalog. En cambio, `Inv
 
 | Operación | Comportamiento |
 |-----------|---------------|
-| `POST /products` | Crea el producto en catalog y llama a inventory para registrar el stock inicial |
+| `POST /products` | Crea el producto en catalog, asigna `active` u `out_of_stock` según el stock inicial y llama a inventory para registrar ese stock |
 | `GET /products` / `GET /products/{id}` | Obtiene el stock desde inventory y lo inyecta en la respuesta |
-| `PATCH /products/{id}` (con `stock`) | Delega la actualización de stock a inventory |
+| `PATCH /products/{id}` (con `stock`) | Delega la actualización de stock a inventory y sincroniza el status visible del producto |
 | `DELETE /products/{id}` | Elimina el producto de catalog y llama a inventory para eliminar su entrada de stock |
 
 **Relacion con el servicio de inventario:** `InventoryService` es un cliente HTTP real del microservicio privado de inventory y usa `INVENTORY_SERVICE_URL` como URL base.

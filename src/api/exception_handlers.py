@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 
 from src.exceptions import (
     EmptyActiveProductImages,
+    ImageNotFound,
     ImageValidationError,
     InvalidImageURLs,
     ProductNotFound,
@@ -70,5 +71,17 @@ def register_exception_handlers(app: FastAPI) -> None:
             request,
             409,
             "Conflict",
-            "An active product must retain at least one image",
+            "A product must retain at least one image",
+        )
+
+    @app.exception_handler(ImageNotFound)
+    async def image_not_found_handler(
+        request: Request, exc: ImageNotFound
+    ) -> JSONResponse:
+        keys_str = ", ".join(exc.keys)
+        return _problem(
+            request,
+            404,
+            "Not Found",
+            f"Image not found in product: {keys_str}",
         )

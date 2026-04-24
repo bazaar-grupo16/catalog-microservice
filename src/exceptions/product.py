@@ -32,4 +32,12 @@ class InvalidImageURLs(Exception):
 
 
 class EmptyActiveProductImages(Exception):
-    """Raised when an operation would leave an active product with zero images."""
+    """Raised when an operation would leave a product with zero images."""
+
+
+class ImageNotFound(Exception):
+    """Raised when one or more image keys are not found in the product's images array."""
+
+    def __init__(self, keys: list[str]) -> None:
+        self.keys = keys
+        super().__init__(f"Image keys not found in product: {keys}")

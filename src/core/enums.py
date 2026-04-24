@@ -8,6 +8,7 @@ from enum import StrEnum
 class ProductStatus(StrEnum):
     ACTIVE = "active"
     INACTIVE = "inactive"
+    OUT_OF_STOCK = "out_of_stock"
 
 
 class ProductSortBy(StrEnum):
