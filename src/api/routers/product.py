@@ -63,7 +63,8 @@ async def create_product(
     responses={200: {"description": "A list of products"}},
     description=(
         "Lists products using catalog visibility rules by default. "
-        "Only active products with stock are returned unless include_inactive=true."
+        "Only products currently visible in the catalog are returned unless "
+        "include_inactive=true."
     ),
 )
 async def get_products(
@@ -151,7 +152,7 @@ async def add_images(
     description=(
         "Deletes one or more images by URL from the product and from storage. "
         "All URLs must belong to the product. "
-        "Active products cannot be left with zero images."
+        "Products cannot be left with zero images."
     ),
     responses={
         200: {"description": "Images deleted and product returned"},
@@ -161,7 +162,7 @@ async def add_images(
         },
         404: {"description": "Product not found", "model": ErrorResponse},
         409: {
-            "description": "Would leave active product with no images",
+            "description": "Would leave product with no images",
             "model": ErrorResponse,
         },
     },
@@ -181,7 +182,7 @@ async def delete_images(
     description=(
         "Deletes one or more images by storage key from the product and from storage. "
         "All keys must belong to the product. "
-        "Active products cannot be left with zero images."
+        "Products cannot be left with zero images."
     ),
     responses={
         200: {"description": "Images deleted and product returned"},
@@ -190,7 +191,7 @@ async def delete_images(
             "model": ErrorResponse,
         },
         409: {
-            "description": "Would leave active product with no images",
+            "description": "Would leave product with no images",
             "model": ErrorResponse,
         },
     },
@@ -210,7 +211,7 @@ async def bulk_delete_images(
     description=(
         "Deletes a single image identified by its storage key (filename in the bucket) "
         "from the product and from storage. "
-        "Active products cannot be left with zero images."
+        "Products cannot be left with zero images."
     ),
     responses={
         200: {"description": "Image deleted and product returned"},
@@ -219,7 +220,7 @@ async def bulk_delete_images(
             "model": ErrorResponse,
         },
         409: {
-            "description": "Would leave active product with no images",
+            "description": "Would leave product with no images",
             "model": ErrorResponse,
         },
     },

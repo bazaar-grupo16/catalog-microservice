@@ -64,6 +64,11 @@ class ProductService:
             price=dto.price,
             category=dto.category,
             seller_id=dto.seller_id,
+            status=(
+                ProductStatus.OUT_OF_STOCK.value
+                if dto.stock == 0
+                else ProductStatus.ACTIVE.value
+            ),
         )
         product = self.repository.create(product)
 
@@ -187,9 +192,7 @@ class ProductService:
 
         urls_to_remove = set(dto.urls)
         remaining = [url for url in (product.images or []) if url not in urls_to_remove]
-
-        if product.status == ProductStatus.ACTIVE.value and not remaining:
-            raise EmptyActiveProductImages()
+        self._ensure_product_keeps_images(remaining)
 
         for url in dto.urls:
             self.storage.delete(self.storage.url_to_key(url))
@@ -212,8 +215,7 @@ class ProductService:
             raise ImageNotFound([dto.image_key])
 
         remaining = [url for url in (product.images or []) if url != matching_url]
-        if product.status == ProductStatus.ACTIVE.value and not remaining:
-            raise EmptyActiveProductImages()
+        self._ensure_product_keeps_images(remaining)
 
         self.storage.delete(self.storage.url_to_key(matching_url))
         product.images = remaining
@@ -239,8 +241,7 @@ class ProductService:
 
         urls_to_remove = {url for url in keys_to_urls.values() if url is not None}
         remaining = [url for url in current_images if url not in urls_to_remove]
-        if product.status == ProductStatus.ACTIVE.value and not remaining:
-            raise EmptyActiveProductImages()
+        self._ensure_product_keeps_images(remaining)
 
         for url in urls_to_remove:
             self.storage.delete(self.storage.url_to_key(url))
@@ -287,3 +288,8 @@ class ProductService:
         product.images = provided
         product.updated_at = utc_now()
         return self._enrich_stock(self.repository.save(product))
+
+    def _ensure_product_keeps_images(self, remaining: list[str]) -> None:
+        """Reject operations that would leave a product without any images."""
+        if not remaining:
+            raise EmptyActiveProductImages()

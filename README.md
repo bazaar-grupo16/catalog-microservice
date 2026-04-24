@@ -125,6 +125,8 @@ Crea el producto en catalog y registra su stock inicial en el inventory service.
 | `seller_id` | UUID | — |
 | `files` | imágenes | Al menos una imagen (JPEG, PNG o WebP, máx. 10 MB c/u) |
 
+Si el producto se crea con `stock=0`, queda en estado `out_of_stock` desde el inicio. Si se crea con `stock>0`, queda `active`.
+
 **Respuesta `201`:**
 ```json
 {
@@ -147,7 +149,7 @@ Crea el producto en catalog y registra su stock inicial en el inventory service.
 
 #### `GET /products` — Listar productos
 
-Devuelve todos los productos activos. El campo `stock` de cada producto se obtiene del inventory service. Los productos con stock 0 se incluyen en los resultados — el frontend decide cómo mostrarlos visualmente.
+Devuelve los productos actualmente visibles en el catálogo público. El campo `stock` de cada producto se obtiene del inventory service. Los productos sin stock (`out_of_stock`) o deshabilitados (`inactive`) no se incluyen, salvo que se use `include_inactive=true`.
 
 **Query params:**
 
@@ -177,6 +179,8 @@ Devuelve todos los productos activos. El campo `stock` de cada producto se obtie
 #### `GET /products/{id}` — Obtener producto por ID
 
 El `stock` devuelto se consulta en tiempo real al inventory service.
+
+Un producto `out_of_stock` sigue siendo consultable por ID para mostrar su detalle, aunque no aparezca en el listado público.
 
 **Respuesta `200`:** objeto `ProductResponse` (mismo formato que al crear).  
 **Respuesta `404`:** error en formato `application/problem+json`.
@@ -224,10 +228,10 @@ Elimina el producto de catalog, borra sus imágenes de DigitalOcean Spaces y eli
 ```json
 { "urls": ["https://cdn.../imagen.jpg"] }
 ```
-No se pueden eliminar todas las imágenes de un producto activo.
+No se pueden eliminar todas las imágenes de un producto, independientemente de su status.
 
 **Respuesta `200`:** objeto `ProductResponse` con el array `images` actualizado.  
-**Respuesta `409`:** si la operación dejaría el producto activo sin imágenes.
+**Respuesta `409`:** si la operación dejaría al producto sin imágenes.
 
 ---
 
@@ -237,7 +241,7 @@ Elimina una imagen identificada por su nombre de archivo en el bucket (el últim
 
 **Respuesta `200`:** objeto `ProductResponse` con el array `images` actualizado.  
 **Respuesta `404`:** si el producto no existe o el key no pertenece al producto.  
-**Respuesta `409`:** si la operación dejaría el producto activo sin imágenes.
+**Respuesta `409`:** si la operación dejaría al producto sin imágenes.
 
 ---
 
@@ -253,7 +257,7 @@ Todos los keys deben pertenecer al producto; si alguno no existe, se rechaza tod
 
 **Respuesta `200`:** objeto `ProductResponse` con el array `images` actualizado.  
 **Respuesta `404`:** si el producto no existe o alguno de los keys no pertenece al producto (el detalle lista los keys faltantes).  
-**Respuesta `409`:** si la operación dejaría el producto activo sin imágenes.
+**Respuesta `409`:** si la operación dejaría al producto sin imágenes.
 
 ---
 
@@ -344,9 +348,9 @@ El campo `stock` no se almacena en la base de datos del catalog. En cambio, `Inv
 
 | Operación | Comportamiento |
 |-----------|---------------|
-| `POST /products` | Crea el producto en catalog y llama a inventory para registrar el stock inicial |
+| `POST /products` | Crea el producto en catalog, asigna `active` u `out_of_stock` según el stock inicial y llama a inventory para registrar ese stock |
 | `GET /products` / `GET /products/{id}` | Obtiene el stock desde inventory y lo inyecta en la respuesta |
-| `PATCH /products/{id}` (con `stock`) | Delega la actualización de stock a inventory |
+| `PATCH /products/{id}` (con `stock`) | Delega la actualización de stock a inventory y sincroniza el status visible del producto |
 | `DELETE /products/{id}` | Elimina el producto de catalog y llama a inventory para eliminar su entrada de stock |
 
 **Relacion con el servicio de inventario:** `InventoryService` es un cliente HTTP real del microservicio privado de inventory y usa `INVENTORY_SERVICE_URL` como URL base.

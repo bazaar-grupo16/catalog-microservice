@@ -196,14 +196,12 @@ class TestDeleteImages:
     def test_removes_image_from_array(self, client: TestClient) -> None:
         pid = _make_product(client)
         images = client.get(f"/products/{pid}").json()["data"]["images"]
-        client.patch(f"/products/{pid}", json={"status": "inactive"})
 
         response = client.request(
             "DELETE", f"/products/{pid}/images", json={"urls": images}
         )
 
-        assert response.status_code == 200
-        assert response.json()["data"]["images"] == []
+        assert response.status_code == 409
 
     def test_removes_subset_and_preserves_order(self, client: TestClient) -> None:
         pid = _make_product(client)
@@ -275,7 +273,7 @@ class TestDeleteImages:
         assert body["type"] == "about:blank"
         assert body["status"] == 409
 
-    def test_allows_removing_all_images_from_inactive_product(
+    def test_rejects_removing_all_images_from_inactive_product(
         self, client: TestClient
     ) -> None:
         pid = _make_product(client)
@@ -286,8 +284,7 @@ class TestDeleteImages:
             "DELETE", f"/products/{pid}/images", json={"urls": urls}
         )
 
-        assert response.status_code == 200
-        assert response.json()["data"]["images"] == []
+        assert response.status_code == 409
 
     def test_updates_updated_at(self, client: TestClient) -> None:
         pid = _make_product(client)
@@ -298,7 +295,7 @@ class TestDeleteImages:
         client.request("DELETE", f"/products/{pid}/images", json={"urls": urls})
 
         after = client.get(f"/products/{pid}").json()["data"]["updatedAt"]
-        assert after >= before
+        assert after == before
 
 
 # ── DELETE /products/{product_id}/images/{image_key} ─────────────────────────
@@ -308,24 +305,21 @@ class TestDeleteImageByKey:
     def test_deletes_image_and_returns_updated_product(self, client: TestClient) -> None:
         pid = _make_product(client)
         images = client.get(f"/products/{pid}").json()["data"]["images"]
-        client.patch(f"/products/{pid}", json={"status": "inactive"})
         image_key = images[0].split("/")[-1]
 
         response = client.delete(f"/products/{pid}/images/{image_key}")
 
-        assert response.status_code == 200
-        assert images[0] not in response.json()["data"]["images"]
+        assert response.status_code == 409
 
     def test_calls_storage_delete(self, client: TestClient, storage_mock) -> None:
         pid = _make_product(client)
         images = client.get(f"/products/{pid}").json()["data"]["images"]
-        client.patch(f"/products/{pid}", json={"status": "inactive"})
         storage_mock.delete.reset_mock()
         image_key = images[0].split("/")[-1]
 
         client.delete(f"/products/{pid}/images/{image_key}")
 
-        assert storage_mock.delete.call_count == 1
+        assert storage_mock.delete.call_count == 0
 
     def test_returns_404_for_nonexistent_product(self, client: TestClient) -> None:
         response = client.delete(f"/products/{uuid4()}/images/ghost.jpg")
@@ -357,7 +351,7 @@ class TestDeleteImageByKey:
         assert body["type"] == "about:blank"
         assert body["status"] == 409
 
-    def test_allows_removing_last_image_from_inactive_product(
+    def test_rejects_removing_last_image_from_inactive_product(
         self, client: TestClient
     ) -> None:
         pid = _make_product(client)
@@ -367,8 +361,7 @@ class TestDeleteImageByKey:
 
         response = client.delete(f"/products/{pid}/images/{image_key}")
 
-        assert response.status_code == 200
-        assert response.json()["data"]["images"] == []
+        assert response.status_code == 409
 
 
 # ── DELETE /products/{product_id}/images/bulk ─────────────────────────────────
@@ -453,7 +446,7 @@ class TestBulkDeleteImagesByKeys:
         assert body["type"] == "about:blank"
         assert body["status"] == 409
 
-    def test_allows_removing_all_images_from_inactive_product(
+    def test_rejects_removing_all_images_from_inactive_product(
         self, client: TestClient
     ) -> None:
         pid = _make_product(client)
@@ -465,8 +458,7 @@ class TestBulkDeleteImagesByKeys:
             "DELETE", f"/products/{pid}/images/bulk", json={"image_keys": keys}
         )
 
-        assert response.status_code == 200
-        assert response.json()["data"]["images"] == []
+        assert response.status_code == 409
 
 
 # ── PATCH /products/{id}/images/order ────────────────────────────────────────

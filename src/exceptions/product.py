@@ -32,7 +32,7 @@ class InvalidImageURLs(Exception):
 
 
 class EmptyActiveProductImages(Exception):
-    """Raised when an operation would leave an active product with zero images."""
+    """Raised when an operation would leave a product with zero images."""
 
 
 class ImageNotFound(Exception):

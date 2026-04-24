@@ -39,6 +39,20 @@ class TestCreateProduct:
         assert len(data["images"]) == 1
         assert "id" in data
 
+    def test_creates_zero_stock_product_as_out_of_stock(
+        self, client: TestClient
+    ) -> None:
+        response = client.post(
+            "/products",
+            data=product_form(title="Sold Out Listing", stock="0"),
+            files=PRODUCT_IMAGE,
+        )
+
+        assert response.status_code == 201
+        data = response.json()["data"]
+        assert data["stock"] == 0
+        assert data["status"] == "out_of_stock"
+
     def test_rejects_invalid_payload(self, client: TestClient) -> None:
         response = client.post(
             "/products",
@@ -74,7 +88,7 @@ class TestCreateProduct:
 class TestListProducts:
     """Listing scenarios with visibility rules and filters."""
 
-    def test_returns_products_regardless_of_stock(self, client: TestClient) -> None:
+    def test_excludes_zero_stock_products_from_catalog(self, client: TestClient) -> None:
         client.post(
             "/products", data=product_form(title="Visible Product"), files=PRODUCT_IMAGE
         )
@@ -89,7 +103,7 @@ class TestListProducts:
         assert response.status_code == 200
         titles = [item["title"] for item in response.json()["data"]]
         assert "Visible Product" in titles
-        assert "Out of Stock" in titles
+        assert "Out of Stock" not in titles
 
     def test_filters_by_category(self, client: TestClient) -> None:
         client.post(
@@ -255,7 +269,7 @@ class TestListProducts:
         assert response.status_code == 200
         assert response.json()["total"] == 2
 
-    def test_search_returns_all_matching_products_regardless_of_stock(
+    def test_search_excludes_out_of_stock_products(
         self, client: TestClient
     ) -> None:
         client.post(
@@ -279,10 +293,10 @@ class TestListProducts:
 
         assert response.status_code == 200
         body = response.json()
-        assert body["total"] == 2
+        assert body["total"] == 1
         titles = [item["title"] for item in body["data"]]
         assert "Available Camera" in titles
-        assert "Out of Stock Camera" in titles
+        assert "Out of Stock Camera" not in titles
 
 
 class TestProductDetail:
@@ -302,6 +316,7 @@ class TestProductDetail:
         data = response.json()["data"]
         assert data["title"] == "Rare Item"
         assert data["stock"] == 0
+        assert data["status"] == "out_of_stock"
 
     def test_returns_404_for_nonexistent_product(self, client: TestClient) -> None:
         product_id = uuid4()

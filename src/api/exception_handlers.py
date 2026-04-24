@@ -71,7 +71,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             request,
             409,
             "Conflict",
-            "An active product must retain at least one image",
+            "A product must retain at least one image",
         )
 
     @app.exception_handler(ImageNotFound)
