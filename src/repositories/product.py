@@ -65,6 +65,12 @@ class ProductRepository:
         if dto.seller_id is not None:
             filters.append(Product.seller_id == dto.seller_id)
 
+        if dto.min_price is not None:
+            filters.append(Product.price >= dto.min_price)
+
+        if dto.max_price is not None:
+            filters.append(Product.price <= dto.max_price)
+
         if dto.search_query is not None:
             normalized_query = dto.search_query.strip()
             if normalized_query:
