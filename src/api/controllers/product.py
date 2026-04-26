@@ -74,6 +74,8 @@ class ProductController:
             category=filters.category,
             seller_id=filters.seller_id,
             include_inactive=filters.include_inactive,
+            sort_by=filters.sort_by,
+            order=filters.order,
         )
         products, total = self.service.get_products(dto)
         return ProductListResponse(
