@@ -9,7 +9,7 @@ from uuid import UUID
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
-from src.core.enums import ProductStatus
+from src.core.enums import ProductSortBy, ProductStatus, SortOrder
 from src.dtos import ProductFilterDTO
 from src.models import Product
 
@@ -54,16 +54,24 @@ class ProductRepository:
                 filters.append(Product.category == dto.category.strip().lower())
         else:
             filters.append(
-                Product.status.notin_([
-                    ProductStatus.INACTIVE.value,
-                    ProductStatus.OUT_OF_STOCK.value,
-                ])
+                Product.status.notin_(
+                    [
+                        ProductStatus.INACTIVE.value,
+                        ProductStatus.OUT_OF_STOCK.value,
+                    ]
+                )
             )
             if dto.category is not None:
                 filters.append(Product.category == dto.category.strip().lower())
 
         if dto.seller_id is not None:
             filters.append(Product.seller_id == dto.seller_id)
+
+        if dto.min_price is not None:
+            filters.append(Product.price >= dto.min_price)
+
+        if dto.max_price is not None:
+            filters.append(Product.price <= dto.max_price)
 
         if dto.search_query is not None:
             normalized_query = dto.search_query.strip()
@@ -72,12 +80,24 @@ class ProductRepository:
                 title_match = Product.title.ilike(search_term)
                 description_match = Product.description.ilike(search_term)
                 filters.append(or_(title_match, description_match))
-                relevance = case(
-                    (title_match, 0),
-                    (description_match, 1),
-                    else_=2,
-                )
-                order_by = [relevance.asc(), Product.created_at.desc()]
+                if dto.sort_by is None:
+                    relevance = case(
+                        (title_match, 0),
+                        (description_match, 1),
+                        else_=2,
+                    )
+                    order_by = [relevance.asc(), Product.created_at.desc()]
+
+        if dto.sort_by is not None:
+            sort_col = {
+                ProductSortBy.PRICE: Product.price,
+                ProductSortBy.CREATED_AT: Product.created_at,
+                ProductSortBy.TITLE: Product.title,
+            }[dto.sort_by]
+            direction = (
+                sort_col.asc() if dto.order == SortOrder.ASC else sort_col.desc()
+            )
+            order_by = [direction]
 
         base_query = select(Product).where(*filters)
         count_query = select(func.count()).select_from(Product).where(*filters)

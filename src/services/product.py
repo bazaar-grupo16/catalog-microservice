@@ -136,7 +136,9 @@ class ProductService:
             if dto.status is None:
                 if dto.stock == 0 and product.status == ProductStatus.ACTIVE.value:
                     product.status = ProductStatus.OUT_OF_STOCK.value
-                elif dto.stock > 0 and product.status == ProductStatus.OUT_OF_STOCK.value:
+                elif (
+                    dto.stock > 0 and product.status == ProductStatus.OUT_OF_STOCK.value
+                ):
                     product.status = ProductStatus.ACTIVE.value
 
         product = self.repository.save(product)
@@ -201,14 +203,20 @@ class ProductService:
         product.updated_at = utc_now()
         return self._enrich_stock(self.repository.save(product))
 
-    def delete_image_by_key(self, product_id: UUID, dto: DeleteImageByKeyDTO) -> Product:
+    def delete_image_by_key(
+        self, product_id: UUID, dto: DeleteImageByKeyDTO
+    ) -> Product:
         """Remove a single image by its storage key (filename) from a product."""
         product = self.repository.find_by_id(product_id)
         if product is None:
             raise ProductNotFound(product_id)
 
         matching_url = next(
-            (url for url in (product.images or []) if url.endswith(f"/{dto.image_key}")),
+            (
+                url
+                for url in (product.images or [])
+                if url.endswith(f"/{dto.image_key}")
+            ),
             None,
         )
         if matching_url is None:

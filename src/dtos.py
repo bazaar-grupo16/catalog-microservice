@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from uuid import UUID
 
-from src.core.enums import ProductStatus
+from src.core.enums import ProductSortBy, ProductStatus, SortOrder
 
 
 @dataclass
@@ -42,6 +42,10 @@ class ProductFilterDTO:
     category: str | None = None
     seller_id: UUID | None = None
     include_inactive: bool = False
+    sort_by: ProductSortBy | None = None
+    order: SortOrder = SortOrder.ASC
+    min_price: float | None = None
+    max_price: float | None = None
 
 
 @dataclass
