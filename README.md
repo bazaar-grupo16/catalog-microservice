@@ -191,7 +191,7 @@ Un producto `out_of_stock` sigue siendo consultable por ID para mostrar su detal
 
 Devuelve una URL pública que apunta directamente al detalle del producto, lista para copiar y compartir fuera de la plataforma.
 
-La base de la URL se configura mediante la variable de entorno `PUBLIC_APP_BASE_URL` (valor por defecto: `http://localhost:3000`).
+La base de la URL se configura mediante la variable de entorno `PUBLIC_APP_BASE_URL` (valor por defecto local: `http://localhost:3000`). En producción debe apuntar al frontend público, por ejemplo `https://bazaar.pib.ar`, no al bucket de imágenes ni al endpoint JSON del backend.
 
 **Respuesta `200`:**
 ```json
