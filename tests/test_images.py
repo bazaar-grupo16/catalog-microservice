@@ -365,6 +365,22 @@ class TestDeleteImageByKey:
 
         assert response.status_code == 409
 
+    def test_deletes_image_successfully_when_product_has_multiple(
+        self, client: TestClient
+    ) -> None:
+        pid = _make_product(client)
+        images = client.post(
+            f"/products/{pid}/images", files=[image_file("extra.jpg")]
+        ).json()["data"]["images"]
+        key_to_delete = images[1].split("/")[-1]
+
+        response = client.delete(f"/products/{pid}/images/{key_to_delete}")
+
+        assert response.status_code == 200
+        remaining = response.json()["data"]["images"]
+        assert len(remaining) == 1
+        assert images[0] in remaining
+
 
 # ── DELETE /products/{product_id}/images/bulk ─────────────────────────────────
 

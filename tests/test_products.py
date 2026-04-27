@@ -442,6 +442,20 @@ class TestUpdateProduct:
 
         assert response.status_code == 422
 
+    def test_updates_stock_and_status_simultaneously(self, client: TestClient) -> None:
+        create_response = client.post(
+            "/products", data=product_form(), files=PRODUCT_IMAGE
+        )
+        product_id = create_response.json()["data"]["id"]
+
+        response = client.patch(
+            f"/products/{product_id}", json={"stock": 0, "status": "inactive"}
+        )
+
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["status"] == "inactive"
+
 
 class TestDeleteProduct:
     """Deletion scenarios for DELETE /products/{id}."""
@@ -605,6 +619,19 @@ class TestStockStatusCallback:
         assert body["type"] == "about:blank"
         assert body["title"] == "Not Found"
         assert body["status"] == 404
+
+    def test_has_stock_true_on_already_active_product_is_noop(
+        self, client: TestClient
+    ) -> None:
+        product_id = self._create_product(client)
+
+        response = client.patch(
+            f"/internal/products/{product_id}/stock-status",
+            json={"has_stock": True},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["data"]["status"] == "active"
 
     def test_get_products_excludes_out_of_stock_by_default(
         self, client: TestClient
