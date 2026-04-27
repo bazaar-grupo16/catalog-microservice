@@ -187,6 +187,26 @@ Un producto `out_of_stock` sigue siendo consultable por ID para mostrar su detal
 
 ---
 
+#### `GET /products/{id}/share-link` — Obtener link compartible de un producto
+
+Devuelve una URL pública que apunta directamente al detalle del producto, lista para copiar y compartir fuera de la plataforma.
+
+La base de la URL se configura mediante la variable de entorno `PUBLIC_APP_BASE_URL` (valor por defecto: `http://localhost:3000`).
+
+**Respuesta `200`:**
+```json
+{
+  "data": {
+    "productId": "b3d1a2c4-...",
+    "url": "https://bazaar.example.com/products/b3d1a2c4-..."
+  }
+}
+```
+
+**Respuesta `404`:** si el producto no existe (`"Product not found"`) o está inactivo (`"Product not available"`), en formato `application/problem+json`.
+
+---
+
 #### `PATCH /products/{id}` — Actualizar producto parcialmente
 
 Solo se modifican los campos presentes en el body. Si se incluye `stock`, el cambio se delega al inventory service.

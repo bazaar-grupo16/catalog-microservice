@@ -25,6 +25,7 @@ for _k, _v in [
     ("SPACES_REGION", "nyc3"),
     ("SPACES_ENDPOINT", "https://nyc3.digitaloceanspaces.com"),
     ("SPACES_CDN_ENDPOINT", "https://bazaar-media.nyc3.cdn.digitaloceanspaces.com"),
+    ("PUBLIC_APP_BASE_URL", "http://test-catalog.example.com"),
 ]:
     os.environ.setdefault(_k, _v)
 

@@ -991,3 +991,37 @@ class TestFuzzySearch:
         body = response.json()
         assert body["total"] == 0
         assert body["data"] == []
+
+
+class TestShareLink:
+    """GET /products/{id}/share-link"""
+
+    def test_active_product_generates_link(self, client: TestClient) -> None:
+        r = client.post("/products", data=product_form(), files=PRODUCT_IMAGE)
+        pid = r.json()["data"]["id"]
+        r = client.get(f"/products/{pid}/share-link")
+        assert r.status_code == 200
+        body = r.json()["data"]
+        assert body["productId"] == pid
+        assert f"/products/{pid}" in body["url"]
+
+    def test_link_uses_configured_base_url(self, client: TestClient) -> None:
+        r = client.post("/products", data=product_form(), files=PRODUCT_IMAGE)
+        pid = r.json()["data"]["id"]
+        r = client.get(f"/products/{pid}/share-link")
+        assert r.status_code == 200
+        assert r.json()["data"]["url"].startswith("http://test-catalog.example.com")
+
+    def test_inactive_product_returns_not_available(self, client: TestClient) -> None:
+        r = client.post("/products", data=product_form(), files=PRODUCT_IMAGE)
+        pid = r.json()["data"]["id"]
+        client.patch(f"/products/{pid}", json={"status": "inactive"})
+        r = client.get(f"/products/{pid}/share-link")
+        assert r.status_code == 404
+        assert r.json()["detail"] == "Product not available"
+
+    def test_nonexistent_product_returns_not_found(self, client: TestClient) -> None:
+        fake_id = str(uuid4())
+        r = client.get(f"/products/{fake_id}/share-link")
+        assert r.status_code == 404
+        assert r.json()["detail"] == "Product not found"

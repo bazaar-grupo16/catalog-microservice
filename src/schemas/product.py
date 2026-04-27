@@ -148,3 +148,12 @@ class BulkDeleteImageKeysRequest(BaseModel):
 
 class StockStatusUpdateRequest(BaseModel):
     has_stock: bool
+
+
+class ShareLinkData(BaseModel):
+    product_id: UUID = Field(serialization_alias="productId")
+    url: str
+
+
+class ShareLinkResponse(BaseModel):
+    data: ShareLinkData
