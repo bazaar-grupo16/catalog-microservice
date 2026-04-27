@@ -4,6 +4,7 @@ Integration tests for product CRUD endpoints.
 
 from __future__ import annotations
 
+import time
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -88,7 +89,9 @@ class TestCreateProduct:
 class TestListProducts:
     """Listing scenarios with visibility rules and filters."""
 
-    def test_excludes_zero_stock_products_from_catalog(self, client: TestClient) -> None:
+    def test_excludes_zero_stock_products_from_catalog(
+        self, client: TestClient
+    ) -> None:
         client.post(
             "/products", data=product_form(title="Visible Product"), files=PRODUCT_IMAGE
         )
@@ -269,9 +272,7 @@ class TestListProducts:
         assert response.status_code == 200
         assert response.json()["total"] == 2
 
-    def test_search_excludes_out_of_stock_products(
-        self, client: TestClient
-    ) -> None:
+    def test_search_excludes_out_of_stock_products(self, client: TestClient) -> None:
         client.post(
             "/products",
             data=product_form(
@@ -441,6 +442,20 @@ class TestUpdateProduct:
 
         assert response.status_code == 422
 
+    def test_updates_stock_and_status_simultaneously(self, client: TestClient) -> None:
+        create_response = client.post(
+            "/products", data=product_form(), files=PRODUCT_IMAGE
+        )
+        product_id = create_response.json()["data"]["id"]
+
+        response = client.patch(
+            f"/products/{product_id}", json={"stock": 0, "status": "inactive"}
+        )
+
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["status"] == "inactive"
+
 
 class TestDeleteProduct:
     """Deletion scenarios for DELETE /products/{id}."""
@@ -545,7 +560,9 @@ class TestStockStatusCallback:
         assert response.status_code == 201
         return response.json()["data"]["id"]
 
-    def test_has_stock_false_on_active_sets_out_of_stock(self, client: TestClient) -> None:
+    def test_has_stock_false_on_active_sets_out_of_stock(
+        self, client: TestClient
+    ) -> None:
         product_id = self._create_product(client)
 
         response = client.patch(
@@ -556,7 +573,9 @@ class TestStockStatusCallback:
         assert response.status_code == 200
         assert response.json()["data"]["status"] == "out_of_stock"
 
-    def test_has_stock_true_on_out_of_stock_sets_active(self, client: TestClient) -> None:
+    def test_has_stock_true_on_out_of_stock_sets_active(
+        self, client: TestClient
+    ) -> None:
         product_id = self._create_product(client)
         client.patch(
             f"/internal/products/{product_id}/stock-status",
@@ -571,7 +590,9 @@ class TestStockStatusCallback:
         assert response.status_code == 200
         assert response.json()["data"]["status"] == "active"
 
-    def test_callback_on_inactive_does_not_change_status(self, client: TestClient) -> None:
+    def test_callback_on_inactive_does_not_change_status(
+        self, client: TestClient
+    ) -> None:
         product_id = self._create_product(client)
         client.patch(f"/products/{product_id}", json={"status": "inactive"})
 
@@ -583,7 +604,9 @@ class TestStockStatusCallback:
         assert response.status_code == 200
         assert response.json()["data"]["status"] == "inactive"
 
-    def test_callback_on_nonexistent_product_returns_404(self, client: TestClient) -> None:
+    def test_callback_on_nonexistent_product_returns_404(
+        self, client: TestClient
+    ) -> None:
         product_id = str(uuid4())
 
         response = client.patch(
@@ -597,7 +620,22 @@ class TestStockStatusCallback:
         assert body["title"] == "Not Found"
         assert body["status"] == 404
 
-    def test_get_products_excludes_out_of_stock_by_default(self, client: TestClient) -> None:
+    def test_has_stock_true_on_already_active_product_is_noop(
+        self, client: TestClient
+    ) -> None:
+        product_id = self._create_product(client)
+
+        response = client.patch(
+            f"/internal/products/{product_id}/stock-status",
+            json={"has_stock": True},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["data"]["status"] == "active"
+
+    def test_get_products_excludes_out_of_stock_by_default(
+        self, client: TestClient
+    ) -> None:
         product_id = self._create_product(client)
         client.patch(
             f"/internal/products/{product_id}/stock-status",
@@ -610,7 +648,9 @@ class TestStockStatusCallback:
         ids = [p["id"] for p in response.json()["data"]]
         assert product_id not in ids
 
-    def test_patch_stock_zero_on_active_sets_out_of_stock(self, client: TestClient) -> None:
+    def test_patch_stock_zero_on_active_sets_out_of_stock(
+        self, client: TestClient
+    ) -> None:
         product_id = self._create_product(client)
 
         response = client.patch(f"/products/{product_id}", json={"stock": 0})
@@ -618,7 +658,9 @@ class TestStockStatusCallback:
         assert response.status_code == 200
         assert response.json()["data"]["status"] == "out_of_stock"
 
-    def test_patch_stock_positive_on_out_of_stock_sets_active(self, client: TestClient) -> None:
+    def test_patch_stock_positive_on_out_of_stock_sets_active(
+        self, client: TestClient
+    ) -> None:
         product_id = self._create_product(client)
         client.patch(f"/products/{product_id}", json={"stock": 0})
 
@@ -626,3 +668,226 @@ class TestStockStatusCallback:
 
         assert response.status_code == 200
         assert response.json()["data"]["status"] == "active"
+
+
+class TestSortProducts:
+    """Sorting scenarios for GET /products."""
+
+    def test_sort_by_price_ascending(self, client: TestClient) -> None:
+        client.post("/products", data=product_form(title="Cheap", price="10.00"), files=PRODUCT_IMAGE)
+        client.post("/products", data=product_form(title="Mid", price="50.00"), files=PRODUCT_IMAGE)
+        client.post("/products", data=product_form(title="Expensive", price="200.00"), files=PRODUCT_IMAGE)
+
+        response = client.get("/products", params={"sort_by": "price", "order": "asc"})
+
+        assert response.status_code == 200
+        prices = [item["price"] for item in response.json()["data"]]
+        assert prices == sorted(prices)
+
+    def test_sort_by_price_descending(self, client: TestClient) -> None:
+        client.post("/products", data=product_form(title="Cheap", price="10.00"), files=PRODUCT_IMAGE)
+        client.post("/products", data=product_form(title="Mid", price="50.00"), files=PRODUCT_IMAGE)
+        client.post("/products", data=product_form(title="Expensive", price="200.00"), files=PRODUCT_IMAGE)
+
+        response = client.get("/products", params={"sort_by": "price", "order": "desc"})
+
+        assert response.status_code == 200
+        prices = [item["price"] for item in response.json()["data"]]
+        assert prices == sorted(prices, reverse=True)
+
+    def test_sort_by_title_ascending(self, client: TestClient) -> None:
+        client.post("/products", data=product_form(title="Zapato"), files=PRODUCT_IMAGE)
+        client.post("/products", data=product_form(title="Abrigo"), files=PRODUCT_IMAGE)
+        client.post("/products", data=product_form(title="Medias"), files=PRODUCT_IMAGE)
+
+        response = client.get("/products", params={"sort_by": "title", "order": "asc"})
+
+        assert response.status_code == 200
+        titles = [item["title"] for item in response.json()["data"]]
+        assert titles == sorted(titles)
+
+    def test_sort_by_title_descending(self, client: TestClient) -> None:
+        client.post("/products", data=product_form(title="Zapato"), files=PRODUCT_IMAGE)
+        client.post("/products", data=product_form(title="Abrigo"), files=PRODUCT_IMAGE)
+        client.post("/products", data=product_form(title="Medias"), files=PRODUCT_IMAGE)
+
+        response = client.get("/products", params={"sort_by": "title", "order": "desc"})
+
+        assert response.status_code == 200
+        titles = [item["title"] for item in response.json()["data"]]
+        assert titles == sorted(titles, reverse=True)
+
+    def test_sort_by_created_at_ascending(self, client: TestClient) -> None:
+        for title in ("First", "Second", "Third"):
+            client.post("/products", data=product_form(title=title), files=PRODUCT_IMAGE)
+            time.sleep(0.01)
+
+        response = client.get("/products", params={"sort_by": "created_at", "order": "asc"})
+
+        assert response.status_code == 200
+        titles = [item["title"] for item in response.json()["data"]]
+        assert titles == ["First", "Second", "Third"]
+
+    def test_sort_by_created_at_descending(self, client: TestClient) -> None:
+        for title in ("First", "Second", "Third"):
+            client.post("/products", data=product_form(title=title), files=PRODUCT_IMAGE)
+            time.sleep(0.01)
+
+        response = client.get("/products", params={"sort_by": "created_at", "order": "desc"})
+
+        assert response.status_code == 200
+        titles = [item["title"] for item in response.json()["data"]]
+        assert titles == ["Third", "Second", "First"]
+
+    def test_sort_by_price_overrides_relevance_when_search_query_present(
+        self, client: TestClient
+    ) -> None:
+        client.post(
+            "/products",
+            data=product_form(title="Gaming Mouse", price="80.00"),
+            files=PRODUCT_IMAGE,
+        )
+        client.post(
+            "/products",
+            data=product_form(title="Keyboard", description="Includes a gaming mouse pad", price="30.00"),
+            files=PRODUCT_IMAGE,
+        )
+
+        response = client.get(
+            "/products",
+            params={"search_query": "gaming mouse", "sort_by": "price", "order": "asc"},
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 2
+        prices = [item["price"] for item in body["data"]]
+        assert prices == sorted(prices)
+
+    def test_invalid_sort_by_returns_422(self, client: TestClient) -> None:
+        response = client.get("/products", params={"sort_by": "invalid_field"})
+
+        assert response.status_code == 422
+
+    def test_invalid_order_returns_422(self, client: TestClient) -> None:
+        response = client.get("/products", params={"sort_by": "price", "order": "random"})
+
+        assert response.status_code == 422
+
+
+class TestFilterByPrice:
+    """Price range filter scenarios for GET /products."""
+
+    def test_filters_by_min_price(self, client: TestClient) -> None:
+        client.post("/products", data=product_form(title="Cheap", price="10.00"), files=PRODUCT_IMAGE)
+        client.post("/products", data=product_form(title="Expensive", price="500.00"), files=PRODUCT_IMAGE)
+
+        response = client.get("/products", params={"min_price": "100"})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 1
+        assert body["data"][0]["title"] == "Expensive"
+
+    def test_filters_by_max_price(self, client: TestClient) -> None:
+        client.post("/products", data=product_form(title="Cheap", price="10.00"), files=PRODUCT_IMAGE)
+        client.post("/products", data=product_form(title="Expensive", price="500.00"), files=PRODUCT_IMAGE)
+
+        response = client.get("/products", params={"max_price": "100"})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 1
+        assert body["data"][0]["title"] == "Cheap"
+
+    def test_filters_by_price_range(self, client: TestClient) -> None:
+        client.post("/products", data=product_form(title="Budget", price="15.00"), files=PRODUCT_IMAGE)
+        client.post("/products", data=product_form(title="Mid", price="75.00"), files=PRODUCT_IMAGE)
+        client.post("/products", data=product_form(title="Premium", price="400.00"), files=PRODUCT_IMAGE)
+
+        response = client.get("/products", params={"min_price": "20", "max_price": "200"})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 1
+        assert body["data"][0]["title"] == "Mid"
+
+    def test_price_boundaries_are_inclusive(self, client: TestClient) -> None:
+        client.post("/products", data=product_form(title="Exact Min", price="50.00"), files=PRODUCT_IMAGE)
+        client.post("/products", data=product_form(title="Exact Max", price="200.00"), files=PRODUCT_IMAGE)
+        client.post("/products", data=product_form(title="Out", price="201.00"), files=PRODUCT_IMAGE)
+
+        response = client.get("/products", params={"min_price": "50", "max_price": "200"})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 2
+        titles = {item["title"] for item in body["data"]}
+        assert titles == {"Exact Min", "Exact Max"}
+
+    def test_price_filter_combined_with_category(self, client: TestClient) -> None:
+        client.post(
+            "/products",
+            data=product_form(title="Cheap Peripheral", price="20.00", category="peripherals"),
+            files=PRODUCT_IMAGE,
+        )
+        client.post(
+            "/products",
+            data=product_form(title="Expensive Peripheral", price="300.00", category="peripherals"),
+            files=PRODUCT_IMAGE,
+        )
+        client.post(
+            "/products",
+            data=product_form(title="Cheap Furniture", price="20.00", category="furniture"),
+            files=PRODUCT_IMAGE,
+        )
+
+        response = client.get(
+            "/products", params={"category": "peripherals", "max_price": "100"}
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 1
+        assert body["data"][0]["title"] == "Cheap Peripheral"
+
+    def test_price_filter_combined_with_search_query(self, client: TestClient) -> None:
+        client.post(
+            "/products",
+            data=product_form(title="Budget Laptop", price="400.00"),
+            files=PRODUCT_IMAGE,
+        )
+        client.post(
+            "/products",
+            data=product_form(title="Premium Laptop", price="1500.00"),
+            files=PRODUCT_IMAGE,
+        )
+
+        response = client.get(
+            "/products", params={"search_query": "laptop", "max_price": "600"}
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 1
+        assert body["data"][0]["title"] == "Budget Laptop"
+
+    def test_rejects_zero_min_price(self, client: TestClient) -> None:
+        response = client.get("/products", params={"min_price": "0"})
+
+        assert response.status_code == 422
+
+    def test_rejects_negative_min_price(self, client: TestClient) -> None:
+        response = client.get("/products", params={"min_price": "-5"})
+
+        assert response.status_code == 422
+
+    def test_rejects_zero_max_price(self, client: TestClient) -> None:
+        response = client.get("/products", params={"max_price": "0"})
+
+        assert response.status_code == 422
+
+    def test_rejects_negative_max_price(self, client: TestClient) -> None:
+        response = client.get("/products", params={"max_price": "-10"})
+
+        assert response.status_code == 422

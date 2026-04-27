@@ -49,6 +49,8 @@ class ProductListRequest:
         include_inactive: bool = False,
         sort_by: ProductSortBy | None = None,
         order: SortOrder = SortOrder.ASC,
+        min_price: float | None = Query(default=None, gt=0),
+        max_price: float | None = Query(default=None, gt=0),
     ) -> None:
         self.limit = limit
         self.offset = offset
@@ -58,6 +60,8 @@ class ProductListRequest:
         self.include_inactive = include_inactive
         self.sort_by = sort_by
         self.order = order
+        self.min_price = min_price
+        self.max_price = max_price
 
 
 class ProductListResponse(BaseModel):

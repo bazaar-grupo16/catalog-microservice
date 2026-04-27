@@ -44,6 +44,8 @@ class ProductFilterDTO:
     include_inactive: bool = False
     sort_by: ProductSortBy | None = None
     order: SortOrder = SortOrder.ASC
+    min_price: float | None = None
+    max_price: float | None = None
 
 
 @dataclass
