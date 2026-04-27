@@ -157,7 +157,7 @@ Devuelve los productos actualmente visibles en el catálogo público. El campo `
 |-----------|------|---------|-------------|
 | `limit` | int (1–50) | `20` | Cantidad máxima de resultados |
 | `offset` | int (≥0) | `0` | Desplazamiento para paginación |
-| `search_query` | string | — | Búsqueda por texto libre en título y descripción |
+| `search_query` | string | — | Búsqueda por texto libre en título y descripción. Soporta búsqueda fuzzy (tolerante a errores tipográficos) vía `pg_trgm`: las coincidencias exactas tienen prioridad, seguidas de coincidencias aproximadas (similarity > 0.3) |
 | `category` | string | — | Filtrar por categoría |
 | `seller_id` | UUID | — | Filtrar por vendedor |
 | `include_inactive` | bool | `false` | Incluir productos con status `inactive` |

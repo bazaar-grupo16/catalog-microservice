@@ -57,6 +57,20 @@ _DB_MAX_WAIT: float = 30.0  # ceiling for a single sleep interval
 _DB_TIMEOUT: float = 300.0  # total budget — give up after this many seconds
 
 
+def setup_search_extensions() -> None:
+    """Enable pg_trgm extension and create GIN indexes for fuzzy search."""
+    with engine.begin() as conn:
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS idx_products_title_trgm "
+            "ON products USING gin(title gin_trgm_ops)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS idx_products_description_trgm "
+            "ON products USING gin(description gin_trgm_ops)"
+        ))
+
+
 def wait_for_db() -> None:
     """
     Block until the database is reachable or the retry budget is exhausted.

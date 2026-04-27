@@ -891,3 +891,72 @@ class TestFilterByPrice:
         response = client.get("/products", params={"max_price": "-10"})
 
         assert response.status_code == 422
+
+
+class TestFuzzySearch:
+    """Búsqueda tolerante a errores tipográficos vía pg_trgm."""
+
+    def test_fuzzy_finds_plural_variant(self, client: TestClient) -> None:
+        """'hieleras' debe encontrar el producto cuyo título es 'hielera'."""
+        client.post(
+            "/products",
+            data=product_form(title="hielera", description="Conserva bebidas frías"),
+            files=PRODUCT_IMAGE,
+        )
+
+        response = client.get("/products", params={"search_query": "hieleras"})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 1
+        assert body["data"][0]["title"] == "hielera"
+
+    def test_fuzzy_finds_missing_letter(self, client: TestClient) -> None:
+        """'campra' debe encontrar 'campera' (letra faltante)."""
+        client.post(
+            "/products",
+            data=product_form(title="campera", description="Abrigo de abrigo"),
+            files=PRODUCT_IMAGE,
+        )
+
+        response = client.get("/products", params={"search_query": "campra"})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 1
+        assert body["data"][0]["title"] == "campera"
+
+    def test_exact_match_ranked_above_fuzzy(self, client: TestClient) -> None:
+        """Coincidencia exacta en título tiene mayor prioridad que coincidencia fuzzy."""
+        client.post(
+            "/products",
+            data=product_form(title="campera", description="Abrigo clásico"),
+            files=PRODUCT_IMAGE,
+        )
+        client.post(
+            "/products",
+            data=product_form(title="camperita", description="Versión reducida"),
+            files=PRODUCT_IMAGE,
+        )
+
+        response = client.get("/products", params={"search_query": "campera"})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 2
+        assert body["data"][0]["title"] == "campera"
+
+    def test_no_similar_query_returns_empty(self, client: TestClient) -> None:
+        """Query sin ninguna similitud no debe devolver resultados."""
+        client.post(
+            "/products",
+            data=product_form(title="teclado", description="Teclado mecánico"),
+            files=PRODUCT_IMAGE,
+        )
+
+        response = client.get("/products", params={"search_query": "xyz123"})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 0
+        assert body["data"] == []

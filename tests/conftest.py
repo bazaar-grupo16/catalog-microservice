@@ -32,7 +32,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
-from src.core.database import Base, engine
+from src.core.database import Base, engine, setup_search_extensions
 from src.main import app
 
 
@@ -40,6 +40,7 @@ from src.main import app
 def _setup_database():
     """Create all tables before the session and tear them down after."""
     Base.metadata.create_all(bind=engine)
+    setup_search_extensions()
     yield
     Base.metadata.drop_all(bind=engine)
 
