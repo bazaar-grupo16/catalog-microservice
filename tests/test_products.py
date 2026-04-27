@@ -88,7 +88,9 @@ class TestCreateProduct:
 class TestListProducts:
     """Listing scenarios with visibility rules and filters."""
 
-    def test_excludes_zero_stock_products_from_catalog(self, client: TestClient) -> None:
+    def test_excludes_zero_stock_products_from_catalog(
+        self, client: TestClient
+    ) -> None:
         client.post(
             "/products", data=product_form(title="Visible Product"), files=PRODUCT_IMAGE
         )
@@ -269,9 +271,7 @@ class TestListProducts:
         assert response.status_code == 200
         assert response.json()["total"] == 2
 
-    def test_search_excludes_out_of_stock_products(
-        self, client: TestClient
-    ) -> None:
+    def test_search_excludes_out_of_stock_products(self, client: TestClient) -> None:
         client.post(
             "/products",
             data=product_form(
@@ -545,7 +545,9 @@ class TestStockStatusCallback:
         assert response.status_code == 201
         return response.json()["data"]["id"]
 
-    def test_has_stock_false_on_active_sets_out_of_stock(self, client: TestClient) -> None:
+    def test_has_stock_false_on_active_sets_out_of_stock(
+        self, client: TestClient
+    ) -> None:
         product_id = self._create_product(client)
 
         response = client.patch(
@@ -556,7 +558,9 @@ class TestStockStatusCallback:
         assert response.status_code == 200
         assert response.json()["data"]["status"] == "out_of_stock"
 
-    def test_has_stock_true_on_out_of_stock_sets_active(self, client: TestClient) -> None:
+    def test_has_stock_true_on_out_of_stock_sets_active(
+        self, client: TestClient
+    ) -> None:
         product_id = self._create_product(client)
         client.patch(
             f"/internal/products/{product_id}/stock-status",
@@ -571,7 +575,9 @@ class TestStockStatusCallback:
         assert response.status_code == 200
         assert response.json()["data"]["status"] == "active"
 
-    def test_callback_on_inactive_does_not_change_status(self, client: TestClient) -> None:
+    def test_callback_on_inactive_does_not_change_status(
+        self, client: TestClient
+    ) -> None:
         product_id = self._create_product(client)
         client.patch(f"/products/{product_id}", json={"status": "inactive"})
 
@@ -583,7 +589,9 @@ class TestStockStatusCallback:
         assert response.status_code == 200
         assert response.json()["data"]["status"] == "inactive"
 
-    def test_callback_on_nonexistent_product_returns_404(self, client: TestClient) -> None:
+    def test_callback_on_nonexistent_product_returns_404(
+        self, client: TestClient
+    ) -> None:
         product_id = str(uuid4())
 
         response = client.patch(
@@ -597,7 +605,9 @@ class TestStockStatusCallback:
         assert body["title"] == "Not Found"
         assert body["status"] == 404
 
-    def test_get_products_excludes_out_of_stock_by_default(self, client: TestClient) -> None:
+    def test_get_products_excludes_out_of_stock_by_default(
+        self, client: TestClient
+    ) -> None:
         product_id = self._create_product(client)
         client.patch(
             f"/internal/products/{product_id}/stock-status",
@@ -610,7 +620,9 @@ class TestStockStatusCallback:
         ids = [p["id"] for p in response.json()["data"]]
         assert product_id not in ids
 
-    def test_patch_stock_zero_on_active_sets_out_of_stock(self, client: TestClient) -> None:
+    def test_patch_stock_zero_on_active_sets_out_of_stock(
+        self, client: TestClient
+    ) -> None:
         product_id = self._create_product(client)
 
         response = client.patch(f"/products/{product_id}", json={"stock": 0})
@@ -618,7 +630,9 @@ class TestStockStatusCallback:
         assert response.status_code == 200
         assert response.json()["data"]["status"] == "out_of_stock"
 
-    def test_patch_stock_positive_on_out_of_stock_sets_active(self, client: TestClient) -> None:
+    def test_patch_stock_positive_on_out_of_stock_sets_active(
+        self, client: TestClient
+    ) -> None:
         product_id = self._create_product(client)
         client.patch(f"/products/{product_id}", json={"stock": 0})
 

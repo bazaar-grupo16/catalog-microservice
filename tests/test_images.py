@@ -302,7 +302,9 @@ class TestDeleteImages:
 
 
 class TestDeleteImageByKey:
-    def test_deletes_image_and_returns_updated_product(self, client: TestClient) -> None:
+    def test_deletes_image_and_returns_updated_product(
+        self, client: TestClient
+    ) -> None:
         pid = _make_product(client)
         images = client.get(f"/products/{pid}").json()["data"]["images"]
         image_key = images[0].split("/")[-1]

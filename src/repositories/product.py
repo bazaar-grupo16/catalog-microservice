@@ -54,10 +54,12 @@ class ProductRepository:
                 filters.append(Product.category == dto.category.strip().lower())
         else:
             filters.append(
-                Product.status.notin_([
-                    ProductStatus.INACTIVE.value,
-                    ProductStatus.OUT_OF_STOCK.value,
-                ])
+                Product.status.notin_(
+                    [
+                        ProductStatus.INACTIVE.value,
+                        ProductStatus.OUT_OF_STOCK.value,
+                    ]
+                )
             )
             if dto.category is not None:
                 filters.append(Product.category == dto.category.strip().lower())
@@ -92,7 +94,9 @@ class ProductRepository:
                 ProductSortBy.CREATED_AT: Product.created_at,
                 ProductSortBy.TITLE: Product.title,
             }[dto.sort_by]
-            direction = sort_col.asc() if dto.order == SortOrder.ASC else sort_col.desc()
+            direction = (
+                sort_col.asc() if dto.order == SortOrder.ASC else sort_col.desc()
+            )
             order_by = [direction]
 
         base_query = select(Product).where(*filters)
