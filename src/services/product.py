@@ -25,6 +25,7 @@ from src.exceptions import (
     ImageNotFound,
     ImageValidationError,
     InvalidImageURLs,
+    ProductNotAvailable,
     ProductNotFound,
 )
 from src.models import Product
@@ -99,6 +100,8 @@ class ProductService:
         product = self.repository.find_by_id(product_id)
         if product is None:
             raise ProductNotFound(product_id)
+        if product.status == ProductStatus.INACTIVE.value:
+            raise ProductNotAvailable(product_id)
         return self._enrich_stock(product)
 
     def delete_product(self, product_id: UUID) -> None:

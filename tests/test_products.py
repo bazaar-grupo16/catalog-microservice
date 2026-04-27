@@ -332,6 +332,37 @@ class TestProductDetail:
         assert body["detail"] == "Product not found"
         assert body["instance"] == f"/products/{product_id}"
 
+    def test_inactive_product_returns_not_available(self, client: TestClient) -> None:
+        create_response = client.post(
+            "/products",
+            data=product_form(title="Disabled Item"),
+            files=PRODUCT_IMAGE,
+        )
+        product_id = create_response.json()["data"]["id"]
+        client.patch(f"/products/{product_id}", json={"status": "inactive"})
+
+        response = client.get(f"/products/{product_id}")
+
+        assert response.status_code == 404
+        body = response.json()
+        assert body["detail"] == "Product not available"
+        assert body["instance"] == f"/products/{product_id}"
+
+    def test_out_of_stock_product_is_visible(self, client: TestClient) -> None:
+        create_response = client.post(
+            "/products",
+            data=product_form(title="Sold Out Item", stock="0"),
+            files=PRODUCT_IMAGE,
+        )
+        product_id = create_response.json()["data"]["id"]
+
+        response = client.get(f"/products/{product_id}")
+
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["status"] == "out_of_stock"
+        assert data["stock"] == 0
+
 
 class TestUpdateProduct:
     """Partial update scenarios for products."""

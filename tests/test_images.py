@@ -289,12 +289,13 @@ class TestDeleteImages:
     def test_updates_updated_at(self, client: TestClient) -> None:
         pid = _make_product(client)
         urls = client.get(f"/products/{pid}").json()["data"]["images"]
-        client.patch(f"/products/{pid}", json={"status": "inactive"})
-        before = client.get(f"/products/{pid}").json()["data"]["updatedAt"]
+        patch_r = client.patch(f"/products/{pid}", json={"status": "inactive"})
+        before = patch_r.json()["data"]["updatedAt"]
 
         client.request("DELETE", f"/products/{pid}/images", json={"urls": urls})
 
-        after = client.get(f"/products/{pid}").json()["data"]["updatedAt"]
+        products = client.get("/products", params={"include_inactive": "true"}).json()["data"]
+        after = next(p for p in products if p["id"] == pid)["updatedAt"]
         assert after == before
 
 
