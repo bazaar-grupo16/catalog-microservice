@@ -14,6 +14,9 @@ from src.dtos import ProductFilterDTO
 from src.models import Product
 
 
+_FUZZY_THRESHOLD = 0.3
+
+
 class ProductRepository:
     """Repository for product database operations."""
 
@@ -77,14 +80,18 @@ class ProductRepository:
             normalized_query = dto.search_query.strip()
             if normalized_query:
                 search_term = f"%{normalized_query}%"
-                title_match = Product.title.ilike(search_term)
-                description_match = Product.description.ilike(search_term)
-                filters.append(or_(title_match, description_match))
+                title_ilike = Product.title.ilike(search_term)
+                description_ilike = Product.description.ilike(search_term)
+                title_fuzzy = func.similarity(Product.title, normalized_query) > _FUZZY_THRESHOLD
+                description_fuzzy = func.similarity(Product.description, normalized_query) > _FUZZY_THRESHOLD
+                filters.append(or_(title_ilike, description_ilike, title_fuzzy, description_fuzzy))
                 if dto.sort_by is None:
                     relevance = case(
-                        (title_match, 0),
-                        (description_match, 1),
-                        else_=2,
+                        (title_ilike, 0),
+                        (description_ilike, 1),
+                        (title_fuzzy, 2),
+                        (description_fuzzy, 3),
+                        else_=4,
                     )
                     order_by = [relevance.asc(), Product.created_at.desc()]
 

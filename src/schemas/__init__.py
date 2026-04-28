@@ -9,6 +9,8 @@ from src.schemas.product import (
     ProductResponse,
     ProductUpdateRequest,
     ReorderImagesRequest,
+    ShareLinkData,
+    ShareLinkResponse,
     StockStatusUpdateRequest,
 )
 from src.schemas.error import ErrorResponse
@@ -23,6 +25,8 @@ __all__ = [
     "DeleteImagesRequest",
     "ReorderImagesRequest",
     "BulkDeleteImageKeysRequest",
+    "ShareLinkData",
+    "ShareLinkResponse",
     "StockStatusUpdateRequest",
     "ErrorResponse",
 ]

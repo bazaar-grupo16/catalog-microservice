@@ -18,6 +18,7 @@ from src.schemas import (
     ProductResponse,
     ProductUpdateRequest,
     ReorderImagesRequest,
+    ShareLinkResponse,
     ErrorResponse,
 )
 
@@ -72,6 +73,22 @@ async def get_products(
     filters: Annotated[ProductListRequest, Depends()],
 ) -> ProductListResponse:
     return await ProductController(db).get_products(filters)
+
+
+@router.get(
+    "/{id}/share-link",
+    response_model=ShareLinkResponse,
+    summary="Get a shareable link for a product",
+    description="Returns a public URL that links directly to the product detail.",
+    responses={
+        404: {"description": "Product not found or not available", "model": ErrorResponse},
+    },
+)
+async def get_product_share_link(
+    id: UUID,
+    db: DbSession,
+) -> ShareLinkResponse:
+    return await ProductController(db).get_share_link(id)
 
 
 @router.get(

@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     # ── Application ──────────────────────────────────
     APP_NAME: str = "catalog-service"
     LOG_LEVEL: str = "info"
+    PUBLIC_APP_BASE_URL: str = "http://localhost:3000"
 
     # ── Database ─────────────────────────────────────
     DB_HOST: str

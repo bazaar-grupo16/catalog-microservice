@@ -138,9 +138,10 @@ jobs:
           SPACES_REGION: ${{ secrets.SPACES_REGION }}
           SPACES_ENDPOINT: ${{ secrets.SPACES_ENDPOINT }}
           SPACES_CDN_ENDPOINT: ${{ secrets.SPACES_CDN_ENDPOINT }}
+          PUBLIC_APP_BASE_URL: ${{ secrets.PUBLIC_APP_BASE_URL }}
         run: |
           sudo apt-get install -y gettext-base
           for f in k8s/*.yaml; do
-            envsubst '${IMAGE_NAME} ${IMAGE_TAG} ${DB_USER} ${DB_PASSWORD} ${DB_NAME} ${SPACES_KEY} ${SPACES_SECRET} ${SPACES_BUCKET} ${SPACES_REGION} ${SPACES_ENDPOINT} ${SPACES_CDN_ENDPOINT}' \
+            envsubst '${IMAGE_NAME} ${IMAGE_TAG} ${DB_USER} ${DB_PASSWORD} ${DB_NAME} ${SPACES_KEY} ${SPACES_SECRET} ${SPACES_BUCKET} ${SPACES_REGION} ${SPACES_ENDPOINT} ${SPACES_CDN_ENDPOINT} ${PUBLIC_APP_BASE_URL}' \
             < "$f" | kubectl apply -f - -n bazaar-dev
           done

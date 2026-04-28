@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 from uuid import UUID, uuid4
 
+from src.core.config import get_settings
 from src.core.enums import ProductStatus
 from src.core.utils import utc_now
 from src.dtos import (
@@ -25,6 +26,7 @@ from src.exceptions import (
     ImageNotFound,
     ImageValidationError,
     InvalidImageURLs,
+    ProductNotAvailable,
     ProductNotFound,
 )
 from src.models import Product
@@ -99,7 +101,19 @@ class ProductService:
         product = self.repository.find_by_id(product_id)
         if product is None:
             raise ProductNotFound(product_id)
+        if product.status == ProductStatus.INACTIVE.value:
+            raise ProductNotAvailable(product_id)
         return self._enrich_stock(product)
+
+    def get_share_link(self, product_id: UUID) -> str:
+        """Return a shareable public URL for an active product."""
+        product = self.repository.find_by_id(product_id)
+        if product is None:
+            raise ProductNotFound(product_id)
+        if product.status == ProductStatus.INACTIVE.value:
+            raise ProductNotAvailable(product_id)
+        base = get_settings().PUBLIC_APP_BASE_URL.rstrip("/")
+        return f"{base}/products/{product_id}"
 
     def delete_product(self, product_id: UUID) -> None:
         """Delete a product, remove its images from storage, and deregister it from inventory."""
