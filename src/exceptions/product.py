@@ -15,6 +15,14 @@ class ProductNotFound(Exception):
         super().__init__(f"Product {product_id} not found")
 
 
+class ProductNotAvailable(Exception):
+    """Raised when a product exists but has been disabled (inactive status)."""
+
+    def __init__(self, product_id: UUID) -> None:
+        self.product_id = product_id
+        super().__init__(f"Product {product_id} not available")
+
+
 class ImageValidationError(Exception):
     """Raised when an uploaded image file fails MIME-type or size validation."""
 

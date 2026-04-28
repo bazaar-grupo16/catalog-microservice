@@ -33,6 +33,8 @@ from src.schemas import (
     ProductResponse,
     ProductUpdateRequest,
     ReorderImagesRequest,
+    ShareLinkData,
+    ShareLinkResponse,
 )
 from src.services import ProductService
 
@@ -87,6 +89,10 @@ class ProductController:
     async def get_product(self, product_id: UUID) -> ProductResponse:
         product = self.service.get_product(product_id)
         return ProductResponse(data=product)
+
+    async def get_share_link(self, product_id: UUID) -> ShareLinkResponse:
+        url = self.service.get_share_link(product_id)
+        return ShareLinkResponse(data=ShareLinkData(product_id=product_id, url=url))
 
     async def delete_product(self, product_id: UUID) -> None:
         self.service.delete_product(product_id)

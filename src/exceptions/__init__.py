@@ -5,11 +5,13 @@ from src.exceptions.product import (
     ImageNotFound,
     ImageValidationError,
     InvalidImageURLs,
+    ProductNotAvailable,
     ProductNotFound,
 )
 
 __all__ = [
     "ProductNotFound",
+    "ProductNotAvailable",
     "ImageValidationError",
     "InvalidImageURLs",
     "EmptyActiveProductImages",

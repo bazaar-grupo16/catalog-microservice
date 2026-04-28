@@ -157,7 +157,7 @@ Devuelve los productos actualmente visibles en el catálogo público. El campo `
 |-----------|------|---------|-------------|
 | `limit` | int (1–50) | `20` | Cantidad máxima de resultados |
 | `offset` | int (≥0) | `0` | Desplazamiento para paginación |
-| `search_query` | string | — | Búsqueda por texto libre en título y descripción |
+| `search_query` | string | — | Búsqueda por texto libre en título y descripción. Soporta búsqueda fuzzy (tolerante a errores tipográficos) vía `pg_trgm`: las coincidencias exactas tienen prioridad, seguidas de coincidencias aproximadas (similarity > 0.3) |
 | `category` | string | — | Filtrar por categoría |
 | `seller_id` | UUID | — | Filtrar por vendedor |
 | `include_inactive` | bool | `false` | Incluir productos con status `inactive` |
@@ -184,6 +184,26 @@ Un producto `out_of_stock` sigue siendo consultable por ID para mostrar su detal
 
 **Respuesta `200`:** objeto `ProductResponse` (mismo formato que al crear).  
 **Respuesta `404`:** error en formato `application/problem+json`.
+
+---
+
+#### `GET /products/{id}/share-link` — Obtener link compartible de un producto
+
+Devuelve una URL pública que apunta directamente al detalle del producto, lista para copiar y compartir fuera de la plataforma.
+
+La base de la URL se configura mediante la variable de entorno `PUBLIC_APP_BASE_URL` (valor por defecto local: `http://localhost:3000`). En producción debe apuntar al frontend público, por ejemplo `https://bazaar.pib.ar`, no al bucket de imágenes ni al endpoint JSON del backend.
+
+**Respuesta `200`:**
+```json
+{
+  "data": {
+    "productId": "b3d1a2c4-...",
+    "url": "https://bazaar.example.com/products/b3d1a2c4-..."
+  }
+}
+```
+
+**Respuesta `404`:** si el producto no existe (`"Product not found"`) o está inactivo (`"Product not available"`), en formato `application/problem+json`.
 
 ---
 

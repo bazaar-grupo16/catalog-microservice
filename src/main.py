@@ -18,7 +18,7 @@ from src.api.health import router as health_router
 from src.api.routers.internal import router as internal_router
 from src.api.routers.product import router as products_router
 from src.core.config import get_settings
-from src.core.database import Base, engine, wait_for_db
+from src.core.database import Base, engine, setup_search_extensions, wait_for_db
 from src.core.logging import setup_logging
 from src.models import Product  # noqa: F401
 
@@ -36,6 +36,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     wait_for_db()
     # Create tables (dev convenience — use Alembic in production).
     Base.metadata.create_all(bind=engine)
+    setup_search_extensions()
     yield
     logger.info("Shutting down %s", settings.APP_NAME)
 

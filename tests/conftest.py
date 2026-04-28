@@ -25,6 +25,7 @@ for _k, _v in [
     ("SPACES_REGION", "nyc3"),
     ("SPACES_ENDPOINT", "https://nyc3.digitaloceanspaces.com"),
     ("SPACES_CDN_ENDPOINT", "https://bazaar-media.nyc3.cdn.digitaloceanspaces.com"),
+    ("PUBLIC_APP_BASE_URL", "http://test-catalog.example.com"),
 ]:
     os.environ.setdefault(_k, _v)
 
@@ -32,7 +33,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
-from src.core.database import Base, engine
+from src.core.database import Base, engine, setup_search_extensions
 from src.main import app
 
 
@@ -40,6 +41,7 @@ from src.main import app
 def _setup_database():
     """Create all tables before the session and tear them down after."""
     Base.metadata.create_all(bind=engine)
+    setup_search_extensions()
     yield
     Base.metadata.drop_all(bind=engine)
 
