@@ -101,8 +101,6 @@ class ProductService:
         product = self.repository.find_by_id(product_id)
         if product is None:
             raise ProductNotFound(product_id)
-        if product.status == ProductStatus.INACTIVE.value:
-            raise ProductNotAvailable(product_id)
         return self._enrich_stock(product)
 
     def get_share_link(self, product_id: UUID) -> str:
