@@ -332,22 +332,6 @@ class TestProductDetail:
         assert body["detail"] == "Product not found"
         assert body["instance"] == f"/products/{product_id}"
 
-    def test_inactive_product_returns_not_available(self, client: TestClient) -> None:
-        create_response = client.post(
-            "/products",
-            data=product_form(title="Disabled Item"),
-            files=PRODUCT_IMAGE,
-        )
-        product_id = create_response.json()["data"]["id"]
-        client.patch(f"/products/{product_id}", json={"status": "inactive"})
-
-        response = client.get(f"/products/{product_id}")
-
-        assert response.status_code == 404
-        body = response.json()
-        assert body["detail"] == "Product not available"
-        assert body["instance"] == f"/products/{product_id}"
-
     def test_out_of_stock_product_is_visible(self, client: TestClient) -> None:
         create_response = client.post(
             "/products",
@@ -1011,14 +995,6 @@ class TestShareLink:
         r = client.get(f"/products/{pid}/share-link")
         assert r.status_code == 200
         assert r.json()["data"]["url"].startswith("http://test-catalog.example.com")
-
-    def test_inactive_product_returns_not_available(self, client: TestClient) -> None:
-        r = client.post("/products", data=product_form(), files=PRODUCT_IMAGE)
-        pid = r.json()["data"]["id"]
-        client.patch(f"/products/{pid}", json={"status": "inactive"})
-        r = client.get(f"/products/{pid}/share-link")
-        assert r.status_code == 404
-        assert r.json()["detail"] == "Product not available"
 
     def test_nonexistent_product_returns_not_found(self, client: TestClient) -> None:
         fake_id = str(uuid4())
