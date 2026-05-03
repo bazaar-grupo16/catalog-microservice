@@ -14,7 +14,6 @@ from src.exceptions import (
     ImageNotFound,
     ImageValidationError,
     InvalidImageURLs,
-    ProductNotAvailable,
     ProductNotFound,
 )
 
@@ -46,12 +45,6 @@ def register_exception_handlers(app: FastAPI) -> None:
         request: Request, exc: ProductNotFound
     ) -> JSONResponse:
         return _problem(request, 404, "Not Found", "Product not found")
-
-    @app.exception_handler(ProductNotAvailable)
-    async def product_not_available_handler(
-        request: Request, exc: ProductNotAvailable
-    ) -> JSONResponse:
-        return _problem(request, 404, "Not Found", "Product not available")
 
     @app.exception_handler(ImageValidationError)
     async def image_validation_error_handler(
