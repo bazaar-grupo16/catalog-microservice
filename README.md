@@ -86,15 +86,27 @@ Microservicio de catálogo de productos para la plataforma Bazaar. Expone una AP
 
 ## Despliegue
 
-El microservicio se despliega automáticamente en DigitalOcean Kubernetes (DOKS) en cada push a `main` a través del workflow de GitHub Actions (`deploy.yml`). El pipeline construye la imagen Docker, la publica en GHCR y aplica los manifiestos de `k8s/`.
+El microservicio se despliega en DigitalOcean Kubernetes (DOKS) mediante el workflow de GitHub Actions `.github/workflows/deploy.yml`. El workflow valida pushes a `main`, pull requests contra `main` y ejecuciones manuales (`workflow_dispatch`); el deploy a Kubernetes se ejecuta en pushes a `main` o en ejecuciones manuales con `run_deploy=true`.
 
-El Ingress de Nginx expone el servicio bajo el prefijo `/catalog`:
+El flujo de CI/CD ejecuta:
+
+1. Lint con Ruff sobre `src/` y `tests/`.
+2. SAST con Bandit sobre `src/`.
+3. Tests con PostgreSQL real mediante `docker compose -f docker-compose.test.yml`.
+4. Build y push de la imagen Docker a GHCR con los tags `${{ github.sha }}` y `latest`.
+5. Deploy a Kubernetes con `kubectl apply`; los manifiestos de `k8s/` se procesan previamente con `envsubst`.
+
+La app corre dentro del contenedor en el puerto `8000`. El `Service` interno la publica dentro del cluster y el Ingress de Nginx expone el acceso HTTP externo.
+
+El Ingress usa el path `/catalog(/|$)(.*)` y reescribe la request hacia la app sin el prefijo `/catalog`:
 
 ```
 http://<cluster-host>/catalog/<endpoint>
 ```
 
 Por ejemplo: `GET http://<cluster-host>/catalog/products`
+
+Las variables de base de datos, Spaces y `PUBLIC_APP_BASE_URL` se inyectan desde secretos de Kubernetes. `INVENTORY_SERVICE_URL` se define en el deployment como `http://inventory-service`.
 
 ## Endpoints
 
@@ -163,6 +175,10 @@ Devuelve los productos actualmente visibles en el catálogo público. El campo `
 | `include_inactive` | bool | `false` | Incluir productos con status `inactive` |
 | `sort_by` | `price` \| `created_at` \| `title` | — | Campo de ordenamiento |
 | `order` | `asc` \| `desc` | `asc` | Dirección del ordenamiento |
+| `min_price` | float (> 0) | — | Precio mínimo inclusivo |
+| `max_price` | float (> 0) | — | Precio máximo inclusivo |
+
+Si `search_query` se usa sin `sort_by`, el orden prioriza relevancia: coincidencia exacta en título, coincidencia exacta en descripción, coincidencia fuzzy en título, coincidencia fuzzy en descripción, y luego fecha de creación descendente. Si se especifica `sort_by`, ese orden explícito reemplaza el orden por relevancia.
 
 **Respuesta `200`:**
 ```json
@@ -203,7 +219,7 @@ La base de la URL se configura mediante la variable de entorno `PUBLIC_APP_BASE_
 }
 ```
 
-**Respuesta `404`:** si el producto no existe (`"Product not found"`) o está inactivo (`"Product not available"`), en formato `application/problem+json`.
+**Respuesta `404`:** si el producto no existe (`"Product not found"`), en formato `application/problem+json`.
 
 ---
 
@@ -217,7 +233,7 @@ Solo se modifican los campos presentes en el body. Si se incluye `stock`, el cam
 | `description` | string | 1–150 caracteres, no vacío |
 | `price` | float | ≥ 0.01 |
 | `stock` | int | ≥ 0 — se actualiza en el inventory service; si pasa a 0 el producto queda `out_of_stock`, si vuelve a ser > 0 desde `out_of_stock` queda `active` |
-| `category` | string | 1–150 caracteres (se normaliza a minúsculas) |
+| `category` | string | 1–150 caracteres, no vacío (se normaliza a minúsculas) |
 | `status` | `active` \| `inactive` \| `out_of_stock` | Los cambios manuales de status tienen precedencia sobre la sincronización automática |
 
 **Respuesta `200`:** objeto `ProductResponse` con los datos actualizados.  
@@ -293,11 +309,9 @@ Debe contener exactamente las mismas URLs que el producto, en el nuevo orden des
 
 ---
 
----
-
 ### Endpoints internos
 
-Estos endpoints son accesibles **únicamente dentro del cluster de Kubernetes**. El Ingress de Nginx no los expone al exterior.
+Estos endpoints son accesibles **únicamente dentro del cluster de Kubernetes**. El Ingress de Nginx expone el prefijo `/catalog` para la API pública y no publica las rutas `/internal`.
 
 #### `PATCH /internal/products/{product_id}/stock-status` — Callback de disponibilidad desde inventory
 
@@ -349,11 +363,11 @@ Router          — registra rutas, delega al controller
 Controller      — instancia Repository, StorageService e InventoryService; convierte schemas → DTOs
     │
     ▼
-Service         — lógica de negocio, coordina repo + storage + inventory; lanza excepciones de dominio
-    ├──▶ Repository      — único lugar que construye queries SQL
+Service         — lógica de negocio: stock, imágenes, estados y excepciones de dominio
+    ├──▶ Repository      — consultas SQLAlchemy y persistencia de productos
     │        └──▶ PostgreSQL
-    ├──▶ StorageService  — cliente S3 para imágenes (DigitalOcean Spaces)
-    └──▶ InventoryService — cliente HTTP del inventory service (gestión de stock)
+    ├──▶ StorageService  — cliente S3/DigitalOcean Spaces para imágenes
+    └──▶ InventoryService — cliente HTTP real del inventory microservice
 ```
 
 **Regla de dependencias:** cada capa solo conoce a la inmediatamente inferior. El servicio no importa nada de `src.schemas` ni de FastAPI. Los routers no tienen lógica de negocio ni acceso a base de datos.
@@ -361,6 +375,8 @@ Service         — lógica de negocio, coordina repo + storage + inventory; lan
 **DTOs (`src/dtos.py`):** dataclasses sin validación que transportan datos entre el controller y el servicio. La validación ocurre en los schemas de Pydantic antes de construir el DTO.
 
 **Excepciones de dominio (`src/exceptions/`):** el servicio lanza `ProductNotFound` (y similares a futuro) en lugar de devolver `None`. `main.py` registra un handler global que serializa estas excepciones a `application/problem+json` según RFC 7807.
+
+**Búsqueda (`pg_trgm`):** durante el startup se habilita la extensión `pg_trgm` y se crean índices GIN sobre `products.title` y `products.description` para soportar búsqueda fuzzy.
 
 ## Integración con inventory service
 
@@ -373,8 +389,8 @@ El campo `stock` no se almacena en la base de datos del catalog. En cambio, `Inv
 | `PATCH /products/{id}` (con `stock`) | Delega la actualización de stock a inventory y sincroniza el status visible del producto |
 | `DELETE /products/{id}` | Elimina el producto de catalog y llama a inventory para eliminar su entrada de stock |
 
-**Relacion con el servicio de inventario:** `InventoryService` es un cliente HTTP real del microservicio privado de inventory y usa `INVENTORY_SERVICE_URL` como URL base.
+Todas las respuestas que incluyen productos se enriquecen con el stock consultado al inventory service. `InventoryService` usa `INVENTORY_SERVICE_URL` como URL base y consume las rutas internas del microservicio privado de inventory.
 
 El frontend NO consume inventory directamente. El cliente público debe seguir usando el gateway/Ingress de catalog, por ejemplo `http://bazaar.pib.ar/catalog`.
 
-**Variable de entorno:** `INVENTORY_SERVICE_URL` — URL base del inventory service (requerida cuando el stub sea reemplazado).
+**Variable de entorno:** `INVENTORY_SERVICE_URL` — URL base del inventory service.
