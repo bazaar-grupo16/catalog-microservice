@@ -13,7 +13,6 @@ from src.schemas import (
     BulkDeleteImageKeysRequest,
     DeleteImagesRequest,
     ErrorResponse,
-    MyProductsFilters,
     ProductCreateForm,
     ProductListRequest,
     ProductListResponse,
@@ -78,26 +77,6 @@ async def get_products(
 ) -> ProductListResponse:
     return await ProductController(db).get_products(filters)
 
-
-@router.get(
-    "/me",
-    summary="Get current user's products",
-    response_model=ProductListResponse,
-    description=(
-        "Returns all products belonging to the authenticated seller, "
-        "including inactive and out-of-stock listings."
-    ),
-    responses={
-        200: {"description": "A list of the authenticated user's products"},
-        401: {"description": "Missing or invalid X-User-ID header", "model": ErrorResponse},
-    },
-)
-async def get_my_products(
-    db: DbSession,
-    user_id: UserID,
-    filters: Annotated[MyProductsFilters, Depends()],
-) -> ProductListResponse:
-    return await ProductController(db).get_my_products(user_id, filters)
 
 
 @router.get(

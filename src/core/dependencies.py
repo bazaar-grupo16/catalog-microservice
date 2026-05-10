@@ -26,6 +26,13 @@ def _get_db() -> Generator[Session, None, None]:
 
 
 def _get_current_user_id(request: Request) -> UUID:
+    x_user_id = request.headers.get("X-User-ID")
+    if x_user_id is not None:
+        try:
+            return UUID(x_user_id)
+        except ValueError:
+            raise HTTPException(status_code=401, detail="Invalid X-User-ID header")
+
     settings = get_settings()
     auth_header = request.headers.get("Authorization")
 
