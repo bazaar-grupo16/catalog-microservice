@@ -87,18 +87,20 @@ Microservicio de catálogo de productos para la plataforma Bazaar. Expone una AP
 
 ## Autenticación
 
-El API Gateway (NGINX Ingress) valida el JWT del cliente y propaga el ID del usuario autenticado como header interno `X-User-ID: <uuid>`. Este microservicio **no procesa JWTs directamente** — solo lee ese header cuando lo necesita.
+El catalog-service valida el JWT **directamente**, sin depender del Ingress. Lee el header `Authorization: Bearer <token>`, lo decodifica con `SECRET_KEY` y `JWT_ALGORITHM` (HS256), y extrae el `user_id` del claim `sub`.
 
-Los endpoints que requieren autenticación validan que el header esté presente y sea un UUID válido. Si no lo es, devuelven `401` en formato `application/problem+json`. Los endpoints públicos no requieren el header.
+Los endpoints que requieren autenticación devuelven `401` en formato `application/problem+json` si el header está ausente, el token está expirado o es inválido. Los endpoints públicos no requieren token.
 
 | Visibilidad | Endpoints |
 |-------------|-----------|
 | **Públicos** (sin auth) | `GET /products`, `GET /products/{id}`, `GET /products/{id}/share-link`, `GET /livez`, `GET /readyz`, `PATCH /internal/products/{id}/stock-status` |
-| **Autenticados** (requieren `X-User-ID`) | `POST /products`, `GET /products/me`, `PATCH /products/{id}`, `DELETE /products/{id}`, y todos los endpoints de imágenes |
+| **Autenticados** (requieren `Authorization: Bearer <token>`) | `POST /products`, `GET /products/me`, `PATCH /products/{id}`, `DELETE /products/{id}`, y todos los endpoints de imágenes |
 
-El Ingress de Nginx está dividido en dos recursos:
-- **`catalog-public-ingress`**: enruta los paths públicos sin pasar por el servicio de autenticación.
-- **`catalog-ingress`**: enruta todo lo demás bajo `/catalog`, configurado con `auth-url` para que NGINX valide el JWT antes de forwwardear la request y agregue el header `X-User-ID`.
+El Ingress es un único recurso **`catalog-ingress`** sin anotaciones de autenticación — la validación del JWT ocurre dentro del propio servicio.
+
+**¿Por qué el catalog-service valida el JWT directamente?**
+
+El catalog-service tiene endpoints mixtos: algunos públicos (`GET /products`, `GET /products/{id}`) y otros autenticados (`POST /products`, `GET /products/me`) sobre los mismos paths base. NGINX Ingress no soporta auth selectiva por método HTTP — la anotación `auth-url` se aplica a todos los requests que matchean un path, sin distinción de método. Separar en dos recursos Ingress tampoco funciona cuando los paths se solapan, ya que NGINX no garantiza que el más específico gane entre recursos distintos. Por eso la validación del JWT se movió al propio servicio, que puede aplicarla selectivamente por endpoint. La decisión está documentada en el ADR correspondiente.
 
 ## Despliegue
 
@@ -114,12 +116,7 @@ El flujo de CI/CD ejecuta:
 
 La app corre dentro del contenedor en el puerto `8000`. El `Service` interno la publica dentro del cluster y el Ingress de Nginx expone el acceso HTTP externo.
 
-El Ingress está dividido en dos recursos (ver `k8s/ingress.yaml`):
-
-- **`catalog-public-ingress`**: expone sin autenticación los paths de solo lectura (`/catalog/products`, `/catalog/products/{id}`, `/catalog/products/{id}/share-link`).
-- **`catalog-ingress`**: expone todo lo demás bajo `/catalog` con autenticación delegada al auth-service.
-
-Ambos reescriben el prefijo `/catalog` antes de forwwardear al pod:
+El Ingress es un único recurso `catalog-ingress` (ver `k8s/ingress.yaml`) que reescribe el prefijo `/catalog` antes de forwwardear al pod:
 
 ```
 http://<cluster-host>/catalog/<endpoint>
@@ -127,7 +124,7 @@ http://<cluster-host>/catalog/<endpoint>
 
 Por ejemplo: `GET http://<cluster-host>/catalog/products`
 
-Las variables de base de datos, Spaces y `PUBLIC_APP_BASE_URL` se inyectan desde secretos de Kubernetes. `INVENTORY_SERVICE_URL` se define en el deployment como `http://inventory-service`.
+Las variables de base de datos, Spaces, `PUBLIC_APP_BASE_URL`, `SECRET_KEY` y `JWT_ALGORITHM` se inyectan desde secretos de Kubernetes. `INVENTORY_SERVICE_URL` se define en el deployment como `http://inventory-service`.
 
 ## Endpoints
 
@@ -386,7 +383,7 @@ Ejemplo de error de autenticación:
   "type": "about:blank",
   "title": "Unauthorized",
   "status": 401,
-  "detail": "Missing X-User-ID header",
+  "detail": "Missing Authorization header",
   "instance": "/products"
 }
 ```
