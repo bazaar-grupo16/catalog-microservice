@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     DB_PASSWORD: str
     DB_NAME: str
 
+    # ── Auth ─────────────────────────────────────────
+    SECRET_KEY: str
+    JWT_ALGORITHM: str = "HS256"
+
     # ── DigitalOcean Spaces ───────────────────────────
     SPACES_KEY: str
     SPACES_SECRET: str
