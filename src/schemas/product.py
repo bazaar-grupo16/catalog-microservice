@@ -105,6 +105,8 @@ class ProductCreateForm:
     Follows the same ``__init__``-based pattern as ``ProductListRequest``
     so FastAPI injects it via ``Depends()``.  Validates and normalises
     the incoming form fields before they reach the controller.
+    The seller_id is NOT part of the form — it is read from the
+    X-User-ID header by the route and passed separately.
     """
 
     def __init__(
@@ -114,7 +116,6 @@ class ProductCreateForm:
         price: Annotated[float, Form(ge=0.01)],
         stock: Annotated[int, Form(ge=0)],
         category: Annotated[str, Form(min_length=1, max_length=80)],
-        seller_id: Annotated[UUID, Form()],
     ) -> None:
         for field, value in [
             ("title", title),
@@ -131,7 +132,24 @@ class ProductCreateForm:
         self.price = price
         self.stock = stock
         self.category = category.strip().lower()
-        self.seller_id = seller_id
+
+
+class MyProductsFilters:
+    """Query parameters for GET /products/me."""
+
+    def __init__(
+        self,
+        limit: Annotated[int, Query(ge=1, le=50)] = 20,
+        offset: Annotated[int, Query(ge=0)] = 0,
+        search_query: str | None = Query(default=None, min_length=1),
+        sort_by: ProductSortBy | None = None,
+        order: SortOrder = SortOrder.ASC,
+    ) -> None:
+        self.limit = limit
+        self.offset = offset
+        self.search_query = search_query
+        self.sort_by = sort_by
+        self.order = order
 
 
 class DeleteImagesRequest(BaseModel):
