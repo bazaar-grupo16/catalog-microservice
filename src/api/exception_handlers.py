@@ -7,6 +7,7 @@ All error responses follow RFC 7807 (application/problem+json).
 from __future__ import annotations
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import HTTPException
 from fastapi.responses import JSONResponse
 
 from src.exceptions import (
@@ -16,6 +17,17 @@ from src.exceptions import (
     InvalidImageURLs,
     ProductNotFound,
 )
+
+_HTTP_TITLES: dict[int, str] = {
+    400: "Bad Request",
+    401: "Unauthorized",
+    403: "Forbidden",
+    404: "Not Found",
+    405: "Method Not Allowed",
+    409: "Conflict",
+    422: "Unprocessable Entity",
+    500: "Internal Server Error",
+}
 
 
 def _problem(
@@ -39,6 +51,13 @@ def _problem(
 
 def register_exception_handlers(app: FastAPI) -> None:
     """Attach all domain exception handlers to *app*."""
+
+    @app.exception_handler(HTTPException)
+    async def http_exception_handler(
+        request: Request, exc: HTTPException
+    ) -> JSONResponse:
+        title = _HTTP_TITLES.get(exc.status_code, "Error")
+        return _problem(request, exc.status_code, title, exc.detail or "")
 
     @app.exception_handler(ProductNotFound)
     async def product_not_found_handler(

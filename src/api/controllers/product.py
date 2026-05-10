@@ -27,6 +27,7 @@ from src.services.storage import StorageService
 from src.schemas import (
     BulkDeleteImageKeysRequest,
     DeleteImagesRequest,
+    MyProductsListRequest,
     ProductCreateForm,
     ProductListRequest,
     ProductListResponse,
@@ -51,7 +52,7 @@ class ProductController:
         )
 
     async def create_product(
-        self, form: ProductCreateForm, files: list[UploadFile]
+        self, form: ProductCreateForm, files: list[UploadFile], seller_id: UUID
     ) -> ProductResponse:
         file_dtos = [
             ImageFileDTO(data=await f.read(), content_type=f.content_type or "")
@@ -63,10 +64,27 @@ class ProductController:
             price=form.price,
             stock=form.stock,
             category=form.category,
-            seller_id=form.seller_id,
+            seller_id=seller_id,
         )
         product = self.service.create_product(dto, AddImagesDTO(files=file_dtos))
         return ProductResponse(data=product)
+
+    async def get_my_products(
+        self, filters: MyProductsListRequest, seller_id: UUID
+    ) -> ProductListResponse:
+        dto = ProductFilterDTO(
+            limit=filters.limit,
+            offset=filters.offset,
+            search_query=filters.search_query,
+            seller_id=seller_id,
+            include_inactive=True,
+            sort_by=filters.sort_by,
+            order=filters.order,
+        )
+        products, total = self.service.get_products(dto)
+        return ProductListResponse(
+            data=products, total=total, limit=dto.limit, offset=dto.offset
+        )
 
     async def get_products(self, filters: ProductListRequest) -> ProductListResponse:
         dto = ProductFilterDTO(

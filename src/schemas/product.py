@@ -114,7 +114,6 @@ class ProductCreateForm:
         price: Annotated[float, Form(ge=0.01)],
         stock: Annotated[int, Form(ge=0)],
         category: Annotated[str, Form(min_length=1, max_length=80)],
-        seller_id: Annotated[UUID, Form()],
     ) -> None:
         for field, value in [
             ("title", title),
@@ -131,7 +130,22 @@ class ProductCreateForm:
         self.price = price
         self.stock = stock
         self.category = category.strip().lower()
-        self.seller_id = seller_id
+
+
+class MyProductsListRequest:
+    def __init__(
+        self,
+        limit: Annotated[int, Query(ge=1, le=50)] = 20,
+        offset: Annotated[int, Query(ge=0)] = 0,
+        search_query: str | None = Query(default=None, min_length=1),
+        sort_by: ProductSortBy | None = None,
+        order: SortOrder = SortOrder.ASC,
+    ) -> None:
+        self.limit = limit
+        self.offset = offset
+        self.search_query = search_query
+        self.sort_by = sort_by
+        self.order = order
 
 
 class DeleteImagesRequest(BaseModel):
