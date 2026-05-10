@@ -9,11 +9,11 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from tests.conftest import PRODUCT_IMAGE
+from tests.conftest import PRODUCT_IMAGE, make_auth_headers
 
-# Header used for all authenticated requests in tests that don't need a
+# Headers used for all authenticated requests in tests that don't need a
 # specific seller identity.
-AUTH_HEADERS = {"X-User-ID": "00000000-0000-0000-0000-000000000001"}
+AUTH_HEADERS = make_auth_headers("00000000-0000-0000-0000-000000000001")
 
 
 def product_form(**overrides: object) -> dict[str, object]:
@@ -223,13 +223,13 @@ class TestListProducts:
             "/products",
             data=product_form(title="Seller A Product"),
             files=PRODUCT_IMAGE,
-            headers={"X-User-ID": seller_a},
+            headers=make_auth_headers(seller_a),
         )
         client.post(
             "/products",
             data=product_form(title="Seller B Product"),
             files=PRODUCT_IMAGE,
-            headers={"X-User-ID": seller_b},
+            headers=make_auth_headers(seller_b),
         )
 
         response = client.get("/products", params={"seller_id": seller_a})
@@ -1067,7 +1067,7 @@ class TestShareLink:
 
 
 class TestAuthRequired:
-    """Verify that authenticated endpoints return 401 without X-User-ID."""
+    """Verify that authenticated endpoints return 401 without Authorization header."""
 
     def test_create_product_requires_auth(self, client: TestClient) -> None:
         response = client.post("/products", data=product_form(), files=PRODUCT_IMAGE)
@@ -1091,16 +1091,16 @@ class TestGetMyProducts:
             "/products",
             data=product_form(title="My Product"),
             files=PRODUCT_IMAGE,
-            headers={"X-User-ID": seller_id},
+            headers=make_auth_headers(seller_id),
         )
         client.post(
             "/products",
             data=product_form(title="Other Seller Product"),
             files=PRODUCT_IMAGE,
-            headers={"X-User-ID": str(uuid4())},
+            headers=make_auth_headers(str(uuid4())),
         )
 
-        response = client.get("/products/me", headers={"X-User-ID": seller_id})
+        response = client.get("/products/me", headers=make_auth_headers(seller_id))
 
         assert response.status_code == 200
         body = response.json()
@@ -1108,7 +1108,7 @@ class TestGetMyProducts:
         assert body["data"][0]["title"] == "My Product"
 
     def test_returns_empty_when_no_products(self, client: TestClient) -> None:
-        response = client.get("/products/me", headers={"X-User-ID": str(uuid4())})
+        response = client.get("/products/me", headers=make_auth_headers(str(uuid4())))
 
         assert response.status_code == 200
         body = response.json()
@@ -1123,25 +1123,25 @@ class TestGetMyProducts:
             "/products",
             data=product_form(title="Active"),
             files=PRODUCT_IMAGE,
-            headers={"X-User-ID": seller_id},
+            headers=make_auth_headers(seller_id),
         ).json()["data"]["id"]
         inactive = client.post(
             "/products",
             data=product_form(title="Inactive"),
             files=PRODUCT_IMAGE,
-            headers={"X-User-ID": seller_id},
+            headers=make_auth_headers(seller_id),
         ).json()["data"]["id"]
         out_of_stock = client.post(
             "/products",
             data=product_form(title="Out of Stock", stock="0"),
             files=PRODUCT_IMAGE,
-            headers={"X-User-ID": seller_id},
+            headers=make_auth_headers(seller_id),
         ).json()["data"]["id"]
         client.patch(
-            f"/products/{inactive}", json={"status": "inactive"}, headers={"X-User-ID": seller_id}
+            f"/products/{inactive}", json={"status": "inactive"}, headers=make_auth_headers(seller_id)
         )
 
-        response = client.get("/products/me", headers={"X-User-ID": seller_id})
+        response = client.get("/products/me", headers=make_auth_headers(seller_id))
 
         assert response.status_code == 200
         body = response.json()
