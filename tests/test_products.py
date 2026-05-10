@@ -11,16 +11,19 @@ from fastapi.testclient import TestClient
 
 from tests.conftest import PRODUCT_IMAGE
 
+# Header used for all authenticated requests in tests that don't need a
+# specific seller identity.
+AUTH_HEADERS = {"X-User-ID": "00000000-0000-0000-0000-000000000001"}
+
 
 def product_form(**overrides: object) -> dict[str, object]:
-    """Build multipart form data for product creation."""
+    """Build multipart form data for product creation (seller_id excluded — passed via header)."""
     data: dict[str, object] = {
         "title": "Mechanical Keyboard",
         "description": "Compact keyboard with tactile switches",
         "price": "129.90",
         "stock": "8",
         "category": "Peripherals",
-        "seller_id": str(uuid4()),
     }
     data.update({k: str(v) for k, v in overrides.items()})
     return data
@@ -30,7 +33,9 @@ class TestCreateProduct:
     """Creation scenarios for products."""
 
     def test_creates_product(self, client: TestClient) -> None:
-        response = client.post("/products", data=product_form(), files=PRODUCT_IMAGE)
+        response = client.post(
+            "/products", data=product_form(), files=PRODUCT_IMAGE, headers=AUTH_HEADERS
+        )
 
         assert response.status_code == 201
         data = response.json()["data"]
@@ -47,6 +52,7 @@ class TestCreateProduct:
             "/products",
             data=product_form(title="Sold Out Listing", stock="0"),
             files=PRODUCT_IMAGE,
+            headers=AUTH_HEADERS,
         )
 
         assert response.status_code == 201
@@ -59,12 +65,13 @@ class TestCreateProduct:
             "/products",
             data=product_form(price="-1", stock="-2"),
             files=PRODUCT_IMAGE,
+            headers=AUTH_HEADERS,
         )
         assert response.status_code == 422
 
     def test_rejects_blank_title(self, client: TestClient) -> None:
         response = client.post(
-            "/products", data=product_form(title="   "), files=PRODUCT_IMAGE
+            "/products", data=product_form(title="   "), files=PRODUCT_IMAGE, headers=AUTH_HEADERS
         )
         assert response.status_code == 422
 
@@ -73,6 +80,7 @@ class TestCreateProduct:
             "/products",
             data=product_form(),
             files=[("files", ("doc.pdf", b"content", "application/pdf"))],
+            headers=AUTH_HEADERS,
         )
         assert response.status_code == 400
 
@@ -82,6 +90,7 @@ class TestCreateProduct:
             "/products",
             data=product_form(),
             files=[("files", ("big.jpg", big, "image/jpeg"))],
+            headers=AUTH_HEADERS,
         )
         assert response.status_code == 400
 
@@ -93,12 +102,16 @@ class TestListProducts:
         self, client: TestClient
     ) -> None:
         client.post(
-            "/products", data=product_form(title="Visible Product"), files=PRODUCT_IMAGE
+            "/products",
+            data=product_form(title="Visible Product"),
+            files=PRODUCT_IMAGE,
+            headers=AUTH_HEADERS,
         )
         client.post(
             "/products",
             data=product_form(title="Out of Stock", stock="0"),
             files=PRODUCT_IMAGE,
+            headers=AUTH_HEADERS,
         )
 
         response = client.get("/products")
@@ -113,11 +126,13 @@ class TestListProducts:
             "/products",
             data=product_form(title="Keyboard", category="peripherals"),
             files=PRODUCT_IMAGE,
+            headers=AUTH_HEADERS,
         )
         client.post(
             "/products",
             data=product_form(title="Chair", category="furniture"),
             files=PRODUCT_IMAGE,
+            headers=AUTH_HEADERS,
         )
 
         response = client.get("/products", params={"category": "peripherals"})
@@ -129,13 +144,13 @@ class TestListProducts:
 
     def test_supports_pagination(self, client: TestClient) -> None:
         client.post(
-            "/products", data=product_form(title="Product A"), files=PRODUCT_IMAGE
+            "/products", data=product_form(title="Product A"), files=PRODUCT_IMAGE, headers=AUTH_HEADERS
         )
         client.post(
-            "/products", data=product_form(title="Product B"), files=PRODUCT_IMAGE
+            "/products", data=product_form(title="Product B"), files=PRODUCT_IMAGE, headers=AUTH_HEADERS
         )
         client.post(
-            "/products", data=product_form(title="Product C"), files=PRODUCT_IMAGE
+            "/products", data=product_form(title="Product C"), files=PRODUCT_IMAGE, headers=AUTH_HEADERS
         )
 
         response = client.get("/products", params={"limit": 2, "offset": 1})
@@ -153,6 +168,7 @@ class TestListProducts:
                 title="Gaming Mouse", description="High precision pointer"
             ),
             files=PRODUCT_IMAGE,
+            headers=AUTH_HEADERS,
         )
         client.post(
             "/products",
@@ -160,6 +176,7 @@ class TestListProducts:
                 title="Keyboard", description="Includes a gaming mouse pad"
             ),
             files=PRODUCT_IMAGE,
+            headers=AUTH_HEADERS,
         )
 
         response = client.get("/products", params={"search_query": "gaming mouse"})
@@ -177,6 +194,7 @@ class TestListProducts:
                 title="Desk Lamp", description="Warm light for reading sessions"
             ),
             files=PRODUCT_IMAGE,
+            headers=AUTH_HEADERS,
         )
 
         response = client.get("/products", params={"search_query": "reading"})
@@ -189,7 +207,7 @@ class TestListProducts:
     def test_search_without_results_returns_empty_list(
         self, client: TestClient
     ) -> None:
-        client.post("/products", data=product_form(), files=PRODUCT_IMAGE)
+        client.post("/products", data=product_form(), files=PRODUCT_IMAGE, headers=AUTH_HEADERS)
 
         response = client.get("/products", params={"search_query": "nonexistent"})
 
@@ -203,13 +221,15 @@ class TestListProducts:
         seller_b = str(uuid4())
         client.post(
             "/products",
-            data=product_form(title="Seller A Product", seller_id=seller_a),
+            data=product_form(title="Seller A Product"),
             files=PRODUCT_IMAGE,
+            headers={"X-User-ID": seller_a},
         )
         client.post(
             "/products",
-            data=product_form(title="Seller B Product", seller_id=seller_b),
+            data=product_form(title="Seller B Product"),
             files=PRODUCT_IMAGE,
+            headers={"X-User-ID": seller_b},
         )
 
         response = client.get("/products", params={"seller_id": seller_a})
@@ -221,15 +241,16 @@ class TestListProducts:
 
     def test_lists_all_products_including_inactive(self, client: TestClient) -> None:
         client.post(
-            "/products", data=product_form(title="Active Product"), files=PRODUCT_IMAGE
+            "/products", data=product_form(title="Active Product"), files=PRODUCT_IMAGE, headers=AUTH_HEADERS
         )
         inactive = client.post(
             "/products",
             data=product_form(title="Inactive Product"),
             files=PRODUCT_IMAGE,
+            headers=AUTH_HEADERS,
         )
         inactive_id = inactive.json()["data"]["id"]
-        client.patch(f"/products/{inactive_id}", json={"status": "inactive"})
+        client.patch(f"/products/{inactive_id}", json={"status": "inactive"}, headers=AUTH_HEADERS)
 
         response = client.get("/products", params={"include_inactive": "true"})
 
@@ -241,14 +262,16 @@ class TestListProducts:
             "/products",
             data=product_form(title="Active Peripheral", category="peripherals"),
             files=PRODUCT_IMAGE,
+            headers=AUTH_HEADERS,
         )
         inactive = client.post(
             "/products",
             data=product_form(title="Inactive Peripheral", category="peripherals"),
             files=PRODUCT_IMAGE,
+            headers=AUTH_HEADERS,
         )
         inactive_id = inactive.json()["data"]["id"]
-        client.patch(f"/products/{inactive_id}", json={"status": "inactive"})
+        client.patch(f"/products/{inactive_id}", json={"status": "inactive"}, headers=AUTH_HEADERS)
 
         response = client.get(
             "/products", params={"include_inactive": "true", "category": "peripherals"}
@@ -261,10 +284,10 @@ class TestListProducts:
         self, client: TestClient
     ) -> None:
         client.post(
-            "/products", data=product_form(title="Product A"), files=PRODUCT_IMAGE
+            "/products", data=product_form(title="Product A"), files=PRODUCT_IMAGE, headers=AUTH_HEADERS
         )
         client.post(
-            "/products", data=product_form(title="Product B"), files=PRODUCT_IMAGE
+            "/products", data=product_form(title="Product B"), files=PRODUCT_IMAGE, headers=AUTH_HEADERS
         )
 
         response = client.get("/products", params={"search_query": " "})
@@ -279,6 +302,7 @@ class TestListProducts:
                 title="Available Camera", description="A camera for travel"
             ),
             files=PRODUCT_IMAGE,
+            headers=AUTH_HEADERS,
         )
         client.post(
             "/products",
@@ -288,6 +312,7 @@ class TestListProducts:
                 stock="0",
             ),
             files=PRODUCT_IMAGE,
+            headers=AUTH_HEADERS,
         )
 
         response = client.get("/products", params={"search_query": "camera"})
@@ -308,6 +333,7 @@ class TestProductDetail:
             "/products",
             data=product_form(title="Rare Item", stock="0"),
             files=PRODUCT_IMAGE,
+            headers=AUTH_HEADERS,
         )
         product_id = create_response.json()["data"]["id"]
 
@@ -337,6 +363,7 @@ class TestProductDetail:
             "/products",
             data=product_form(title="Sold Out Item", stock="0"),
             files=PRODUCT_IMAGE,
+            headers=AUTH_HEADERS,
         )
         product_id = create_response.json()["data"]["id"]
 
@@ -353,12 +380,12 @@ class TestUpdateProduct:
 
     def test_updates_title(self, client: TestClient) -> None:
         create_response = client.post(
-            "/products", data=product_form(), files=PRODUCT_IMAGE
+            "/products", data=product_form(), files=PRODUCT_IMAGE, headers=AUTH_HEADERS
         )
         product_id = create_response.json()["data"]["id"]
 
         response = client.patch(
-            f"/products/{product_id}", json={"title": "Updated Keyboard"}
+            f"/products/{product_id}", json={"title": "Updated Keyboard"}, headers=AUTH_HEADERS
         )
 
         assert response.status_code == 200
@@ -368,12 +395,12 @@ class TestUpdateProduct:
 
     def test_updates_price_and_stock(self, client: TestClient) -> None:
         create_response = client.post(
-            "/products", data=product_form(), files=PRODUCT_IMAGE
+            "/products", data=product_form(), files=PRODUCT_IMAGE, headers=AUTH_HEADERS
         )
         product_id = create_response.json()["data"]["id"]
 
         response = client.patch(
-            f"/products/{product_id}", json={"price": 99.99, "stock": 3}
+            f"/products/{product_id}", json={"price": 99.99, "stock": 3}, headers=AUTH_HEADERS
         )
 
         assert response.status_code == 200
@@ -383,12 +410,12 @@ class TestUpdateProduct:
 
     def test_updates_category_normalizes_to_lowercase(self, client: TestClient) -> None:
         create_response = client.post(
-            "/products", data=product_form(), files=PRODUCT_IMAGE
+            "/products", data=product_form(), files=PRODUCT_IMAGE, headers=AUTH_HEADERS
         )
         product_id = create_response.json()["data"]["id"]
 
         response = client.patch(
-            f"/products/{product_id}", json={"category": "Office Supplies"}
+            f"/products/{product_id}", json={"category": "Office Supplies"}, headers=AUTH_HEADERS
         )
 
         assert response.status_code == 200
@@ -396,11 +423,13 @@ class TestUpdateProduct:
 
     def test_deactivates_product(self, client: TestClient) -> None:
         create_response = client.post(
-            "/products", data=product_form(), files=PRODUCT_IMAGE
+            "/products", data=product_form(), files=PRODUCT_IMAGE, headers=AUTH_HEADERS
         )
         product_id = create_response.json()["data"]["id"]
 
-        response = client.patch(f"/products/{product_id}", json={"status": "inactive"})
+        response = client.patch(
+            f"/products/{product_id}", json={"status": "inactive"}, headers=AUTH_HEADERS
+        )
 
         assert response.status_code == 200
         assert response.json()["data"]["status"] == "inactive"
@@ -409,12 +438,14 @@ class TestUpdateProduct:
 
     def test_reactivates_product(self, client: TestClient) -> None:
         create_response = client.post(
-            "/products", data=product_form(), files=PRODUCT_IMAGE
+            "/products", data=product_form(), files=PRODUCT_IMAGE, headers=AUTH_HEADERS
         )
         product_id = create_response.json()["data"]["id"]
 
-        client.patch(f"/products/{product_id}", json={"status": "inactive"})
-        response = client.patch(f"/products/{product_id}", json={"status": "active"})
+        client.patch(f"/products/{product_id}", json={"status": "inactive"}, headers=AUTH_HEADERS)
+        response = client.patch(
+            f"/products/{product_id}", json={"status": "active"}, headers=AUTH_HEADERS
+        )
 
         assert response.status_code == 200
         assert response.json()["data"]["status"] == "active"
@@ -422,49 +453,57 @@ class TestUpdateProduct:
         assert product_id in ids
 
     def test_returns_404_for_nonexistent_product(self, client: TestClient) -> None:
-        response = client.patch(f"/products/{uuid4()}", json={"title": "Ghost"})
+        response = client.patch(
+            f"/products/{uuid4()}", json={"title": "Ghost"}, headers=AUTH_HEADERS
+        )
 
         assert response.status_code == 404
         assert response.json()["detail"] == "Product not found"
 
     def test_rejects_invalid_price(self, client: TestClient) -> None:
         create_response = client.post(
-            "/products", data=product_form(), files=PRODUCT_IMAGE
+            "/products", data=product_form(), files=PRODUCT_IMAGE, headers=AUTH_HEADERS
         )
         product_id = create_response.json()["data"]["id"]
 
-        response = client.patch(f"/products/{product_id}", json={"price": -10})
+        response = client.patch(
+            f"/products/{product_id}", json={"price": -10}, headers=AUTH_HEADERS
+        )
 
         assert response.status_code == 422
 
     def test_rejects_blank_title(self, client: TestClient) -> None:
         create_response = client.post(
-            "/products", data=product_form(), files=PRODUCT_IMAGE
+            "/products", data=product_form(), files=PRODUCT_IMAGE, headers=AUTH_HEADERS
         )
         product_id = create_response.json()["data"]["id"]
 
-        response = client.patch(f"/products/{product_id}", json={"title": "   "})
+        response = client.patch(
+            f"/products/{product_id}", json={"title": "   "}, headers=AUTH_HEADERS
+        )
 
         assert response.status_code == 422
 
     def test_rejects_boolean_price(self, client: TestClient) -> None:
         create_response = client.post(
-            "/products", data=product_form(), files=PRODUCT_IMAGE
+            "/products", data=product_form(), files=PRODUCT_IMAGE, headers=AUTH_HEADERS
         )
         product_id = create_response.json()["data"]["id"]
 
-        response = client.patch(f"/products/{product_id}", json={"price": True})
+        response = client.patch(
+            f"/products/{product_id}", json={"price": True}, headers=AUTH_HEADERS
+        )
 
         assert response.status_code == 422
 
     def test_updates_stock_and_status_simultaneously(self, client: TestClient) -> None:
         create_response = client.post(
-            "/products", data=product_form(), files=PRODUCT_IMAGE
+            "/products", data=product_form(), files=PRODUCT_IMAGE, headers=AUTH_HEADERS
         )
         product_id = create_response.json()["data"]["id"]
 
         response = client.patch(
-            f"/products/{product_id}", json={"stock": 0, "status": "inactive"}
+            f"/products/{product_id}", json={"stock": 0, "status": "inactive"}, headers=AUTH_HEADERS
         )
 
         assert response.status_code == 200
@@ -477,21 +516,21 @@ class TestDeleteProduct:
 
     def test_returns_204(self, client: TestClient) -> None:
         create_response = client.post(
-            "/products", data=product_form(), files=PRODUCT_IMAGE
+            "/products", data=product_form(), files=PRODUCT_IMAGE, headers=AUTH_HEADERS
         )
         product_id = create_response.json()["data"]["id"]
 
-        response = client.delete(f"/products/{product_id}")
+        response = client.delete(f"/products/{product_id}", headers=AUTH_HEADERS)
 
         assert response.status_code == 204
         assert response.content == b""
 
     def test_deleted_product_is_no_longer_accessible(self, client: TestClient) -> None:
         create_response = client.post(
-            "/products", data=product_form(), files=PRODUCT_IMAGE
+            "/products", data=product_form(), files=PRODUCT_IMAGE, headers=AUTH_HEADERS
         )
         product_id = create_response.json()["data"]["id"]
-        client.delete(f"/products/{product_id}")
+        client.delete(f"/products/{product_id}", headers=AUTH_HEADERS)
 
         response = client.get(f"/products/{product_id}")
 
@@ -499,10 +538,13 @@ class TestDeleteProduct:
 
     def test_deleted_product_disappears_from_listing(self, client: TestClient) -> None:
         create_response = client.post(
-            "/products", data=product_form(title="To Be Deleted"), files=PRODUCT_IMAGE
+            "/products",
+            data=product_form(title="To Be Deleted"),
+            files=PRODUCT_IMAGE,
+            headers=AUTH_HEADERS,
         )
         product_id = create_response.json()["data"]["id"]
-        client.delete(f"/products/{product_id}")
+        client.delete(f"/products/{product_id}", headers=AUTH_HEADERS)
 
         response = client.get("/products", params={"include_inactive": "true"})
 
@@ -513,23 +555,24 @@ class TestDeleteProduct:
         self, client: TestClient, storage_mock
     ) -> None:
         create_response = client.post(
-            "/products", data=product_form(), files=PRODUCT_IMAGE
+            "/products", data=product_form(), files=PRODUCT_IMAGE, headers=AUTH_HEADERS
         )
         product_id = create_response.json()["data"]["id"]
         client.post(
             f"/products/{product_id}/images",
             files=[("files", ("extra.jpg", b"x" * 100, "image/jpeg"))],
+            headers=AUTH_HEADERS,
         )
         storage_mock.delete.reset_mock()
 
-        client.delete(f"/products/{product_id}")
+        client.delete(f"/products/{product_id}", headers=AUTH_HEADERS)
 
         assert storage_mock.delete.call_count == 2
 
     def test_returns_404_for_nonexistent_product(self, client: TestClient) -> None:
         product_id = uuid4()
 
-        response = client.delete(f"/products/{product_id}")
+        response = client.delete(f"/products/{product_id}", headers=AUTH_HEADERS)
 
         assert response.status_code == 404
         body = response.json()
@@ -543,26 +586,28 @@ class TestDeleteProduct:
         self, client: TestClient, storage_mock
     ) -> None:
         create_response = client.post(
-            "/products", data=product_form(), files=PRODUCT_IMAGE
+            "/products", data=product_form(), files=PRODUCT_IMAGE, headers=AUTH_HEADERS
         )
         product_id = create_response.json()["data"]["id"]
         storage_mock.delete.side_effect = Exception("Spaces unavailable")
 
-        response = client.delete(f"/products/{product_id}")
+        response = client.delete(f"/products/{product_id}", headers=AUTH_HEADERS)
 
         assert response.status_code == 204
         assert client.get(f"/products/{product_id}").status_code == 404
 
     def test_deletes_product_with_no_images(self, client: TestClient) -> None:
         create_response = client.post(
-            "/products", data=product_form(), files=PRODUCT_IMAGE
+            "/products", data=product_form(), files=PRODUCT_IMAGE, headers=AUTH_HEADERS
         )
         product_id = create_response.json()["data"]["id"]
         url = client.get(f"/products/{product_id}").json()["data"]["images"][0]
-        client.patch(f"/products/{product_id}", json={"status": "inactive"})
-        client.request("DELETE", f"/products/{product_id}/images", json={"urls": [url]})
+        client.patch(f"/products/{product_id}", json={"status": "inactive"}, headers=AUTH_HEADERS)
+        client.request(
+            "DELETE", f"/products/{product_id}/images", json={"urls": [url]}, headers=AUTH_HEADERS
+        )
 
-        response = client.delete(f"/products/{product_id}")
+        response = client.delete(f"/products/{product_id}", headers=AUTH_HEADERS)
 
         assert response.status_code == 204
 
@@ -571,7 +616,9 @@ class TestStockStatusCallback:
     """Internal stock-status callback scenarios."""
 
     def _create_product(self, client: TestClient) -> str:
-        response = client.post("/products", data=product_form(), files=PRODUCT_IMAGE)
+        response = client.post(
+            "/products", data=product_form(), files=PRODUCT_IMAGE, headers=AUTH_HEADERS
+        )
         assert response.status_code == 201
         return response.json()["data"]["id"]
 
@@ -609,7 +656,7 @@ class TestStockStatusCallback:
         self, client: TestClient
     ) -> None:
         product_id = self._create_product(client)
-        client.patch(f"/products/{product_id}", json={"status": "inactive"})
+        client.patch(f"/products/{product_id}", json={"status": "inactive"}, headers=AUTH_HEADERS)
 
         response = client.patch(
             f"/internal/products/{product_id}/stock-status",
@@ -668,7 +715,9 @@ class TestStockStatusCallback:
     ) -> None:
         product_id = self._create_product(client)
 
-        response = client.patch(f"/products/{product_id}", json={"stock": 0})
+        response = client.patch(
+            f"/products/{product_id}", json={"stock": 0}, headers=AUTH_HEADERS
+        )
 
         assert response.status_code == 200
         assert response.json()["data"]["status"] == "out_of_stock"
@@ -677,9 +726,11 @@ class TestStockStatusCallback:
         self, client: TestClient
     ) -> None:
         product_id = self._create_product(client)
-        client.patch(f"/products/{product_id}", json={"stock": 0})
+        client.patch(f"/products/{product_id}", json={"stock": 0}, headers=AUTH_HEADERS)
 
-        response = client.patch(f"/products/{product_id}", json={"stock": 5})
+        response = client.patch(
+            f"/products/{product_id}", json={"stock": 5}, headers=AUTH_HEADERS
+        )
 
         assert response.status_code == 200
         assert response.json()["data"]["status"] == "active"
@@ -689,9 +740,9 @@ class TestSortProducts:
     """Sorting scenarios for GET /products."""
 
     def test_sort_by_price_ascending(self, client: TestClient) -> None:
-        client.post("/products", data=product_form(title="Cheap", price="10.00"), files=PRODUCT_IMAGE)
-        client.post("/products", data=product_form(title="Mid", price="50.00"), files=PRODUCT_IMAGE)
-        client.post("/products", data=product_form(title="Expensive", price="200.00"), files=PRODUCT_IMAGE)
+        client.post("/products", data=product_form(title="Cheap", price="10.00"), files=PRODUCT_IMAGE, headers=AUTH_HEADERS)
+        client.post("/products", data=product_form(title="Mid", price="50.00"), files=PRODUCT_IMAGE, headers=AUTH_HEADERS)
+        client.post("/products", data=product_form(title="Expensive", price="200.00"), files=PRODUCT_IMAGE, headers=AUTH_HEADERS)
 
         response = client.get("/products", params={"sort_by": "price", "order": "asc"})
 
@@ -700,9 +751,9 @@ class TestSortProducts:
         assert prices == sorted(prices)
 
     def test_sort_by_price_descending(self, client: TestClient) -> None:
-        client.post("/products", data=product_form(title="Cheap", price="10.00"), files=PRODUCT_IMAGE)
-        client.post("/products", data=product_form(title="Mid", price="50.00"), files=PRODUCT_IMAGE)
-        client.post("/products", data=product_form(title="Expensive", price="200.00"), files=PRODUCT_IMAGE)
+        client.post("/products", data=product_form(title="Cheap", price="10.00"), files=PRODUCT_IMAGE, headers=AUTH_HEADERS)
+        client.post("/products", data=product_form(title="Mid", price="50.00"), files=PRODUCT_IMAGE, headers=AUTH_HEADERS)
+        client.post("/products", data=product_form(title="Expensive", price="200.00"), files=PRODUCT_IMAGE, headers=AUTH_HEADERS)
 
         response = client.get("/products", params={"sort_by": "price", "order": "desc"})
 
@@ -711,9 +762,9 @@ class TestSortProducts:
         assert prices == sorted(prices, reverse=True)
 
     def test_sort_by_title_ascending(self, client: TestClient) -> None:
-        client.post("/products", data=product_form(title="Zapato"), files=PRODUCT_IMAGE)
-        client.post("/products", data=product_form(title="Abrigo"), files=PRODUCT_IMAGE)
-        client.post("/products", data=product_form(title="Medias"), files=PRODUCT_IMAGE)
+        client.post("/products", data=product_form(title="Zapato"), files=PRODUCT_IMAGE, headers=AUTH_HEADERS)
+        client.post("/products", data=product_form(title="Abrigo"), files=PRODUCT_IMAGE, headers=AUTH_HEADERS)
+        client.post("/products", data=product_form(title="Medias"), files=PRODUCT_IMAGE, headers=AUTH_HEADERS)
 
         response = client.get("/products", params={"sort_by": "title", "order": "asc"})
 
@@ -722,9 +773,9 @@ class TestSortProducts:
         assert titles == sorted(titles)
 
     def test_sort_by_title_descending(self, client: TestClient) -> None:
-        client.post("/products", data=product_form(title="Zapato"), files=PRODUCT_IMAGE)
-        client.post("/products", data=product_form(title="Abrigo"), files=PRODUCT_IMAGE)
-        client.post("/products", data=product_form(title="Medias"), files=PRODUCT_IMAGE)
+        client.post("/products", data=product_form(title="Zapato"), files=PRODUCT_IMAGE, headers=AUTH_HEADERS)
+        client.post("/products", data=product_form(title="Abrigo"), files=PRODUCT_IMAGE, headers=AUTH_HEADERS)
+        client.post("/products", data=product_form(title="Medias"), files=PRODUCT_IMAGE, headers=AUTH_HEADERS)
 
         response = client.get("/products", params={"sort_by": "title", "order": "desc"})
 
@@ -734,7 +785,7 @@ class TestSortProducts:
 
     def test_sort_by_created_at_ascending(self, client: TestClient) -> None:
         for title in ("First", "Second", "Third"):
-            client.post("/products", data=product_form(title=title), files=PRODUCT_IMAGE)
+            client.post("/products", data=product_form(title=title), files=PRODUCT_IMAGE, headers=AUTH_HEADERS)
             time.sleep(0.01)
 
         response = client.get("/products", params={"sort_by": "created_at", "order": "asc"})
@@ -745,7 +796,7 @@ class TestSortProducts:
 
     def test_sort_by_created_at_descending(self, client: TestClient) -> None:
         for title in ("First", "Second", "Third"):
-            client.post("/products", data=product_form(title=title), files=PRODUCT_IMAGE)
+            client.post("/products", data=product_form(title=title), files=PRODUCT_IMAGE, headers=AUTH_HEADERS)
             time.sleep(0.01)
 
         response = client.get("/products", params={"sort_by": "created_at", "order": "desc"})
@@ -761,11 +812,13 @@ class TestSortProducts:
             "/products",
             data=product_form(title="Gaming Mouse", price="80.00"),
             files=PRODUCT_IMAGE,
+            headers=AUTH_HEADERS,
         )
         client.post(
             "/products",
             data=product_form(title="Keyboard", description="Includes a gaming mouse pad", price="30.00"),
             files=PRODUCT_IMAGE,
+            headers=AUTH_HEADERS,
         )
 
         response = client.get(
@@ -794,8 +847,8 @@ class TestFilterByPrice:
     """Price range filter scenarios for GET /products."""
 
     def test_filters_by_min_price(self, client: TestClient) -> None:
-        client.post("/products", data=product_form(title="Cheap", price="10.00"), files=PRODUCT_IMAGE)
-        client.post("/products", data=product_form(title="Expensive", price="500.00"), files=PRODUCT_IMAGE)
+        client.post("/products", data=product_form(title="Cheap", price="10.00"), files=PRODUCT_IMAGE, headers=AUTH_HEADERS)
+        client.post("/products", data=product_form(title="Expensive", price="500.00"), files=PRODUCT_IMAGE, headers=AUTH_HEADERS)
 
         response = client.get("/products", params={"min_price": "100"})
 
@@ -805,8 +858,8 @@ class TestFilterByPrice:
         assert body["data"][0]["title"] == "Expensive"
 
     def test_filters_by_max_price(self, client: TestClient) -> None:
-        client.post("/products", data=product_form(title="Cheap", price="10.00"), files=PRODUCT_IMAGE)
-        client.post("/products", data=product_form(title="Expensive", price="500.00"), files=PRODUCT_IMAGE)
+        client.post("/products", data=product_form(title="Cheap", price="10.00"), files=PRODUCT_IMAGE, headers=AUTH_HEADERS)
+        client.post("/products", data=product_form(title="Expensive", price="500.00"), files=PRODUCT_IMAGE, headers=AUTH_HEADERS)
 
         response = client.get("/products", params={"max_price": "100"})
 
@@ -816,9 +869,9 @@ class TestFilterByPrice:
         assert body["data"][0]["title"] == "Cheap"
 
     def test_filters_by_price_range(self, client: TestClient) -> None:
-        client.post("/products", data=product_form(title="Budget", price="15.00"), files=PRODUCT_IMAGE)
-        client.post("/products", data=product_form(title="Mid", price="75.00"), files=PRODUCT_IMAGE)
-        client.post("/products", data=product_form(title="Premium", price="400.00"), files=PRODUCT_IMAGE)
+        client.post("/products", data=product_form(title="Budget", price="15.00"), files=PRODUCT_IMAGE, headers=AUTH_HEADERS)
+        client.post("/products", data=product_form(title="Mid", price="75.00"), files=PRODUCT_IMAGE, headers=AUTH_HEADERS)
+        client.post("/products", data=product_form(title="Premium", price="400.00"), files=PRODUCT_IMAGE, headers=AUTH_HEADERS)
 
         response = client.get("/products", params={"min_price": "20", "max_price": "200"})
 
@@ -828,9 +881,9 @@ class TestFilterByPrice:
         assert body["data"][0]["title"] == "Mid"
 
     def test_price_boundaries_are_inclusive(self, client: TestClient) -> None:
-        client.post("/products", data=product_form(title="Exact Min", price="50.00"), files=PRODUCT_IMAGE)
-        client.post("/products", data=product_form(title="Exact Max", price="200.00"), files=PRODUCT_IMAGE)
-        client.post("/products", data=product_form(title="Out", price="201.00"), files=PRODUCT_IMAGE)
+        client.post("/products", data=product_form(title="Exact Min", price="50.00"), files=PRODUCT_IMAGE, headers=AUTH_HEADERS)
+        client.post("/products", data=product_form(title="Exact Max", price="200.00"), files=PRODUCT_IMAGE, headers=AUTH_HEADERS)
+        client.post("/products", data=product_form(title="Out", price="201.00"), files=PRODUCT_IMAGE, headers=AUTH_HEADERS)
 
         response = client.get("/products", params={"min_price": "50", "max_price": "200"})
 
@@ -845,16 +898,19 @@ class TestFilterByPrice:
             "/products",
             data=product_form(title="Cheap Peripheral", price="20.00", category="peripherals"),
             files=PRODUCT_IMAGE,
+            headers=AUTH_HEADERS,
         )
         client.post(
             "/products",
             data=product_form(title="Expensive Peripheral", price="300.00", category="peripherals"),
             files=PRODUCT_IMAGE,
+            headers=AUTH_HEADERS,
         )
         client.post(
             "/products",
             data=product_form(title="Cheap Furniture", price="20.00", category="furniture"),
             files=PRODUCT_IMAGE,
+            headers=AUTH_HEADERS,
         )
 
         response = client.get(
@@ -871,11 +927,13 @@ class TestFilterByPrice:
             "/products",
             data=product_form(title="Budget Laptop", price="400.00"),
             files=PRODUCT_IMAGE,
+            headers=AUTH_HEADERS,
         )
         client.post(
             "/products",
             data=product_form(title="Premium Laptop", price="1500.00"),
             files=PRODUCT_IMAGE,
+            headers=AUTH_HEADERS,
         )
 
         response = client.get(
@@ -917,6 +975,7 @@ class TestFuzzySearch:
             "/products",
             data=product_form(title="hielera", description="Conserva bebidas frías"),
             files=PRODUCT_IMAGE,
+            headers=AUTH_HEADERS,
         )
 
         response = client.get("/products", params={"search_query": "hieleras"})
@@ -932,6 +991,7 @@ class TestFuzzySearch:
             "/products",
             data=product_form(title="campera", description="Abrigo de abrigo"),
             files=PRODUCT_IMAGE,
+            headers=AUTH_HEADERS,
         )
 
         response = client.get("/products", params={"search_query": "campra"})
@@ -947,11 +1007,13 @@ class TestFuzzySearch:
             "/products",
             data=product_form(title="campera", description="Abrigo clásico"),
             files=PRODUCT_IMAGE,
+            headers=AUTH_HEADERS,
         )
         client.post(
             "/products",
             data=product_form(title="camperita", description="Versión reducida"),
             files=PRODUCT_IMAGE,
+            headers=AUTH_HEADERS,
         )
 
         response = client.get("/products", params={"search_query": "campera"})
@@ -967,6 +1029,7 @@ class TestFuzzySearch:
             "/products",
             data=product_form(title="teclado", description="Teclado mecánico"),
             files=PRODUCT_IMAGE,
+            headers=AUTH_HEADERS,
         )
 
         response = client.get("/products", params={"search_query": "xyz123"})
@@ -981,7 +1044,7 @@ class TestShareLink:
     """GET /products/{id}/share-link"""
 
     def test_active_product_generates_link(self, client: TestClient) -> None:
-        r = client.post("/products", data=product_form(), files=PRODUCT_IMAGE)
+        r = client.post("/products", data=product_form(), files=PRODUCT_IMAGE, headers=AUTH_HEADERS)
         pid = r.json()["data"]["id"]
         r = client.get(f"/products/{pid}/share-link")
         assert r.status_code == 200
@@ -990,7 +1053,7 @@ class TestShareLink:
         assert f"/products/{pid}" in body["url"]
 
     def test_link_uses_configured_base_url(self, client: TestClient) -> None:
-        r = client.post("/products", data=product_form(), files=PRODUCT_IMAGE)
+        r = client.post("/products", data=product_form(), files=PRODUCT_IMAGE, headers=AUTH_HEADERS)
         pid = r.json()["data"]["id"]
         r = client.get(f"/products/{pid}/share-link")
         assert r.status_code == 200
@@ -1001,3 +1064,91 @@ class TestShareLink:
         r = client.get(f"/products/{fake_id}/share-link")
         assert r.status_code == 404
         assert r.json()["detail"] == "Product not found"
+
+
+class TestAuthRequired:
+    """Verify that authenticated endpoints return 401 without X-User-ID."""
+
+    def test_create_product_requires_auth(self, client: TestClient) -> None:
+        response = client.post("/products", data=product_form(), files=PRODUCT_IMAGE)
+        assert response.status_code == 401
+
+    def test_update_product_requires_auth(self, client: TestClient) -> None:
+        response = client.patch(f"/products/{uuid4()}", json={"title": "Ghost"})
+        assert response.status_code == 401
+
+    def test_delete_product_requires_auth(self, client: TestClient) -> None:
+        response = client.delete(f"/products/{uuid4()}")
+        assert response.status_code == 401
+
+
+class TestGetMyProducts:
+    """GET /products/me — seller's own product listing."""
+
+    def test_returns_own_products(self, client: TestClient) -> None:
+        seller_id = str(uuid4())
+        client.post(
+            "/products",
+            data=product_form(title="My Product"),
+            files=PRODUCT_IMAGE,
+            headers={"X-User-ID": seller_id},
+        )
+        client.post(
+            "/products",
+            data=product_form(title="Other Seller Product"),
+            files=PRODUCT_IMAGE,
+            headers={"X-User-ID": str(uuid4())},
+        )
+
+        response = client.get("/products/me", headers={"X-User-ID": seller_id})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 1
+        assert body["data"][0]["title"] == "My Product"
+
+    def test_returns_empty_when_no_products(self, client: TestClient) -> None:
+        response = client.get("/products/me", headers={"X-User-ID": str(uuid4())})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 0
+        assert body["data"] == []
+
+    def test_includes_inactive_and_out_of_stock_products(
+        self, client: TestClient
+    ) -> None:
+        seller_id = str(uuid4())
+        active = client.post(
+            "/products",
+            data=product_form(title="Active"),
+            files=PRODUCT_IMAGE,
+            headers={"X-User-ID": seller_id},
+        ).json()["data"]["id"]
+        inactive = client.post(
+            "/products",
+            data=product_form(title="Inactive"),
+            files=PRODUCT_IMAGE,
+            headers={"X-User-ID": seller_id},
+        ).json()["data"]["id"]
+        out_of_stock = client.post(
+            "/products",
+            data=product_form(title="Out of Stock", stock="0"),
+            files=PRODUCT_IMAGE,
+            headers={"X-User-ID": seller_id},
+        ).json()["data"]["id"]
+        client.patch(
+            f"/products/{inactive}", json={"status": "inactive"}, headers={"X-User-ID": seller_id}
+        )
+
+        response = client.get("/products/me", headers={"X-User-ID": seller_id})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 3
+        ids = {item["id"] for item in body["data"]}
+        assert {active, inactive, out_of_stock} == ids
+
+    def test_returns_401_without_header(self, client: TestClient) -> None:
+        response = client.get("/products/me")
+        assert response.status_code == 401

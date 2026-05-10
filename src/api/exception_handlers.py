@@ -6,7 +6,7 @@ All error responses follow RFC 7807 (application/problem+json).
 
 from __future__ import annotations
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from src.exceptions import (
@@ -85,3 +85,20 @@ def register_exception_handlers(app: FastAPI) -> None:
             "Not Found",
             f"Image not found in product: {keys_str}",
         )
+
+    _HTTP_TITLES = {
+        400: "Bad Request",
+        401: "Unauthorized",
+        403: "Forbidden",
+        404: "Not Found",
+        409: "Conflict",
+        422: "Unprocessable Entity",
+    }
+
+    @app.exception_handler(HTTPException)
+    async def http_exception_handler(
+        request: Request, exc: HTTPException
+    ) -> JSONResponse:
+        title = _HTTP_TITLES.get(exc.status_code, "Error")
+        detail = str(exc.detail) if exc.detail is not None else title
+        return _problem(request, exc.status_code, title, detail)

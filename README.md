@@ -6,6 +6,7 @@ Microservicio de catálogo de productos para la plataforma Bazaar. Expone una AP
 
 - [Stack](#stack)
 - [Estructura del proyecto](#estructura-del-proyecto)
+- [Autenticación](#autenticación)
 - [Despliegue](#despliegue)
 - [Endpoints](#endpoints)
   - [Health](#health)
@@ -37,7 +38,7 @@ Microservicio de catálogo de productos para la plataforma Bazaar. Expone una AP
 │   ├── core/                   # Concerns transversales
 │   │   ├── config.py           # Configuración desde variables de entorno
 │   │   ├── database.py         # Engine, sesión, base declarativa y retry de conexión
-│   │   ├── dependencies.py     # DbSession (Depends reutilizable)
+│   │   ├── dependencies.py     # DbSession y UserID (Depends reutilizables)
 │   │   ├── enums.py            # Enumeraciones compartidas (ProductStatus, ProductSortBy, SortOrder)
 │   │   ├── logging.py          # Configuración de logging estructurado
 │   │   └── utils.py            # Funciones utilitarias (utc_now)
@@ -84,6 +85,21 @@ Microservicio de catálogo de productos para la plataforma Bazaar. Expone una AP
 └── .env.example
 ```
 
+## Autenticación
+
+El API Gateway (NGINX Ingress) valida el JWT del cliente y propaga el ID del usuario autenticado como header interno `X-User-ID: <uuid>`. Este microservicio **no procesa JWTs directamente** — solo lee ese header cuando lo necesita.
+
+Los endpoints que requieren autenticación validan que el header esté presente y sea un UUID válido. Si no lo es, devuelven `401` en formato `application/problem+json`. Los endpoints públicos no requieren el header.
+
+| Visibilidad | Endpoints |
+|-------------|-----------|
+| **Públicos** (sin auth) | `GET /products`, `GET /products/{id}`, `GET /products/{id}/share-link`, `GET /livez`, `GET /readyz`, `PATCH /internal/products/{id}/stock-status` |
+| **Autenticados** (requieren `X-User-ID`) | `POST /products`, `GET /products/me`, `PATCH /products/{id}`, `DELETE /products/{id}`, y todos los endpoints de imágenes |
+
+El Ingress de Nginx está dividido en dos recursos:
+- **`catalog-public-ingress`**: enruta los paths públicos sin pasar por el servicio de autenticación.
+- **`catalog-ingress`**: enruta todo lo demás bajo `/catalog`, configurado con `auth-url` para que NGINX valide el JWT antes de forwwardear la request y agregue el header `X-User-ID`.
+
 ## Despliegue
 
 El microservicio se despliega en DigitalOcean Kubernetes (DOKS) mediante el workflow de GitHub Actions `.github/workflows/deploy.yml`. El workflow valida pushes a `main`, pull requests contra `main` y ejecuciones manuales (`workflow_dispatch`); el deploy a Kubernetes se ejecuta en pushes a `main` o en ejecuciones manuales con `run_deploy=true`.
@@ -98,7 +114,12 @@ El flujo de CI/CD ejecuta:
 
 La app corre dentro del contenedor en el puerto `8000`. El `Service` interno la publica dentro del cluster y el Ingress de Nginx expone el acceso HTTP externo.
 
-El Ingress usa el path `/catalog(/|$)(.*)` y reescribe la request hacia la app sin el prefijo `/catalog`:
+El Ingress está dividido en dos recursos (ver `k8s/ingress.yaml`):
+
+- **`catalog-public-ingress`**: expone sin autenticación los paths de solo lectura (`/catalog/products`, `/catalog/products/{id}`, `/catalog/products/{id}/share-link`).
+- **`catalog-ingress`**: expone todo lo demás bajo `/catalog` con autenticación delegada al auth-service.
+
+Ambos reescriben el prefijo `/catalog` antes de forwwardear al pod:
 
 ```
 http://<cluster-host>/catalog/<endpoint>
@@ -134,7 +155,6 @@ Crea el producto en catalog y registra su stock inicial en el inventory service.
 | `price` | float | ≥ 0.01 |
 | `stock` | int | ≥ 0 — se envía al inventory service |
 | `category` | string | 1–80 caracteres (se normaliza a minúsculas) |
-| `seller_id` | UUID | — |
 | `files` | imágenes | Al menos una imagen (JPEG, PNG o WebP, máx. 10 MB c/u) |
 
 Si el producto se crea con `stock=0`, queda en estado `out_of_stock` desde el inicio. Si se crea con `stock>0`, queda `active`.
@@ -156,6 +176,17 @@ Si el producto se crea con `stock=0`, queda en estado `out_of_stock` desde el in
   }
 }
 ```
+
+---
+
+#### `GET /products/me` — Mis productos
+
+Devuelve todas las publicaciones del vendedor autenticado, **incluyendo** productos con status `inactive` o `out_of_stock` (el vendedor ve su catálogo completo).
+
+**Query params:** `limit`, `offset`, `search_query`, `sort_by`, `order` (mismos que `GET /products`).
+
+**Respuesta `200`:** mismo formato que `GET /products`.  
+**Respuesta `401`:** si falta el header o el UUID es inválido.
 
 ---
 
@@ -337,7 +368,7 @@ Comportamiento según el status actual del producto:
 
 ### Formato de errores
 
-Todos los errores de dominio siguen [RFC 7807 Problem Details](https://www.rfc-editor.org/rfc/rfc7807) con `Content-Type: application/problem+json`:
+Todos los errores siguen [RFC 7807 Problem Details](https://www.rfc-editor.org/rfc/rfc7807) con `Content-Type: application/problem+json`, incluyendo los errores de autenticación (`401`):
 
 ```json
 {
@@ -346,6 +377,17 @@ Todos los errores de dominio siguen [RFC 7807 Problem Details](https://www.rfc-e
   "status": 404,
   "detail": "Product not found",
   "instance": "/products/550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+Ejemplo de error de autenticación:
+```json
+{
+  "type": "about:blank",
+  "title": "Unauthorized",
+  "status": 401,
+  "detail": "Missing X-User-ID header",
+  "instance": "/products"
 }
 ```
 

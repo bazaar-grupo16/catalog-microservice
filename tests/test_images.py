@@ -19,6 +19,10 @@ from fastapi.testclient import TestClient
 
 from tests.conftest import PRODUCT_IMAGE, _CDN_BASE
 
+# Header used for all authenticated requests in tests that don't need a
+# specific seller identity.
+AUTH_HEADERS = {"X-User-ID": "00000000-0000-0000-0000-000000000001"}
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -37,8 +41,6 @@ def image_file(
 
 def _make_product(client: TestClient) -> str:
     """Create a product and return its ID string."""
-    from uuid import uuid4
-
     response = client.post(
         "/products",
         data={
@@ -47,9 +49,9 @@ def _make_product(client: TestClient) -> str:
             "price": "299.99",
             "stock": "5",
             "category": "Electronics",
-            "seller_id": str(uuid4()),
         },
         files=PRODUCT_IMAGE,
+        headers=AUTH_HEADERS,
     )
     assert response.status_code == 201
     return response.json()["data"]["id"]
@@ -62,7 +64,9 @@ class TestAddImages:
     def test_appends_single_image(self, client: TestClient) -> None:
         pid = _make_product(client)
 
-        response = client.post(f"/products/{pid}/images", files=[image_file()])
+        response = client.post(
+            f"/products/{pid}/images", files=[image_file()], headers=AUTH_HEADERS
+        )
 
         assert response.status_code == 200
         images = response.json()["data"]["images"]
@@ -76,6 +80,7 @@ class TestAddImages:
         response = client.post(
             f"/products/{pid}/images",
             files=[image_file("a.jpg"), image_file("b.png", "image/png")],
+            headers=AUTH_HEADERS,
         )
 
         assert response.status_code == 200
@@ -83,10 +88,12 @@ class TestAddImages:
 
     def test_appends_to_existing_images(self, client: TestClient) -> None:
         pid = _make_product(client)
-        client.post(f"/products/{pid}/images", files=[image_file("extra.jpg")])
+        client.post(
+            f"/products/{pid}/images", files=[image_file("extra.jpg")], headers=AUTH_HEADERS
+        )
 
         response = client.post(
-            f"/products/{pid}/images", files=[image_file("more.jpg")]
+            f"/products/{pid}/images", files=[image_file("more.jpg")], headers=AUTH_HEADERS
         )
 
         assert response.status_code == 200
@@ -94,7 +101,7 @@ class TestAddImages:
 
     def test_images_appear_in_get_product(self, client: TestClient) -> None:
         pid = _make_product(client)
-        client.post(f"/products/{pid}/images", files=[image_file()])
+        client.post(f"/products/{pid}/images", files=[image_file()], headers=AUTH_HEADERS)
 
         response = client.get(f"/products/{pid}")
 
@@ -111,8 +118,6 @@ class TestAddImages:
     def test_product_creation_requires_at_least_one_image(
         self, client: TestClient
     ) -> None:
-        from uuid import uuid4
-
         response = client.post(
             "/products",
             data={
@@ -121,8 +126,8 @@ class TestAddImages:
                 "price": "10.00",
                 "stock": "1",
                 "category": "test",
-                "seller_id": str(uuid4()),
             },
+            headers=AUTH_HEADERS,
             # no files parameter
         )
         assert response.status_code == 422
@@ -131,6 +136,7 @@ class TestAddImages:
         response = client.post(
             f"/products/{uuid4()}/images",
             files=[image_file()],
+            headers=AUTH_HEADERS,
         )
 
         assert response.status_code == 404
@@ -142,6 +148,7 @@ class TestAddImages:
         response = client.post(
             f"/products/{pid}/images",
             files=[("files", ("doc.pdf", b"pdf content", "application/pdf"))],
+            headers=AUTH_HEADERS,
         )
 
         assert response.status_code == 400
@@ -156,6 +163,7 @@ class TestAddImages:
         response = client.post(
             f"/products/{pid}/images",
             files=[("files", ("big.jpg", big, "image/jpeg"))],
+            headers=AUTH_HEADERS,
         )
 
         assert response.status_code == 400
@@ -173,6 +181,7 @@ class TestAddImages:
                 image_file("valid.jpg"),
                 ("files", ("bad.txt", b"text", "text/plain")),
             ],
+            headers=AUTH_HEADERS,
         )
 
         assert response.status_code == 400
@@ -183,10 +192,15 @@ class TestAddImages:
         pid = _make_product(client)
         before = client.get(f"/products/{pid}").json()["data"]["updatedAt"]
 
-        client.post(f"/products/{pid}/images", files=[image_file()])
+        client.post(f"/products/{pid}/images", files=[image_file()], headers=AUTH_HEADERS)
 
         after = client.get(f"/products/{pid}").json()["data"]["updatedAt"]
         assert after >= before
+
+    def test_requires_auth(self, client: TestClient) -> None:
+        pid = _make_product(client)
+        response = client.post(f"/products/{pid}/images", files=[image_file()])
+        assert response.status_code == 401
 
 
 # ── DELETE /products/{id}/images ─────────────────────────────────────────────
@@ -198,7 +212,7 @@ class TestDeleteImages:
         images = client.get(f"/products/{pid}").json()["data"]["images"]
 
         response = client.request(
-            "DELETE", f"/products/{pid}/images", json={"urls": images}
+            "DELETE", f"/products/{pid}/images", json={"urls": images}, headers=AUTH_HEADERS
         )
 
         assert response.status_code == 409
@@ -208,11 +222,12 @@ class TestDeleteImages:
         extra = client.post(
             f"/products/{pid}/images",
             files=[image_file("a.jpg"), image_file("b.jpg")],
+            headers=AUTH_HEADERS,
         ).json()["data"]["images"]
         # extra now has 3 urls: [creation_img, a.jpg, b.jpg]
 
         response = client.request(
-            "DELETE", f"/products/{pid}/images", json={"urls": [extra[1]]}
+            "DELETE", f"/products/{pid}/images", json={"urls": [extra[1]]}, headers=AUTH_HEADERS
         )
 
         assert response.status_code == 200
@@ -226,11 +241,15 @@ class TestDeleteImages:
         images = client.post(
             f"/products/{pid}/images",
             files=[image_file("a.jpg"), image_file("b.jpg")],
+            headers=AUTH_HEADERS,
         ).json()["data"]["images"]
         storage_mock.delete.reset_mock()
 
         client.request(
-            "DELETE", f"/products/{pid}/images", json={"urls": [images[0], images[2]]}
+            "DELETE",
+            f"/products/{pid}/images",
+            json={"urls": [images[0], images[2]]},
+            headers=AUTH_HEADERS,
         )
 
         assert storage_mock.delete.call_count == 2
@@ -240,6 +259,7 @@ class TestDeleteImages:
             "DELETE",
             f"/products/{uuid4()}/images",
             json={"urls": [f"{_CDN_BASE}/products/fake/img.jpg"]},
+            headers=AUTH_HEADERS,
         )
 
         assert response.status_code == 404
@@ -251,6 +271,7 @@ class TestDeleteImages:
             "DELETE",
             f"/products/{pid}/images",
             json={"urls": [f"{_CDN_BASE}/products/{pid}/ghost.jpg"]},
+            headers=AUTH_HEADERS,
         )
 
         assert response.status_code == 400
@@ -265,7 +286,7 @@ class TestDeleteImages:
         url = client.get(f"/products/{pid}").json()["data"]["images"][0]
 
         response = client.request(
-            "DELETE", f"/products/{pid}/images", json={"urls": [url]}
+            "DELETE", f"/products/{pid}/images", json={"urls": [url]}, headers=AUTH_HEADERS
         )
 
         assert response.status_code == 409
@@ -278,10 +299,10 @@ class TestDeleteImages:
     ) -> None:
         pid = _make_product(client)
         urls = client.get(f"/products/{pid}").json()["data"]["images"]
-        client.patch(f"/products/{pid}", json={"status": "inactive"})
+        client.patch(f"/products/{pid}", json={"status": "inactive"}, headers=AUTH_HEADERS)
 
         response = client.request(
-            "DELETE", f"/products/{pid}/images", json={"urls": urls}
+            "DELETE", f"/products/{pid}/images", json={"urls": urls}, headers=AUTH_HEADERS
         )
 
         assert response.status_code == 409
@@ -289,14 +310,26 @@ class TestDeleteImages:
     def test_updates_updated_at(self, client: TestClient) -> None:
         pid = _make_product(client)
         urls = client.get(f"/products/{pid}").json()["data"]["images"]
-        patch_r = client.patch(f"/products/{pid}", json={"status": "inactive"})
+        patch_r = client.patch(
+            f"/products/{pid}", json={"status": "inactive"}, headers=AUTH_HEADERS
+        )
         before = patch_r.json()["data"]["updatedAt"]
 
-        client.request("DELETE", f"/products/{pid}/images", json={"urls": urls})
+        client.request(
+            "DELETE", f"/products/{pid}/images", json={"urls": urls}, headers=AUTH_HEADERS
+        )
 
         products = client.get("/products", params={"include_inactive": "true"}).json()["data"]
         after = next(p for p in products if p["id"] == pid)["updatedAt"]
         assert after == before
+
+    def test_requires_auth(self, client: TestClient) -> None:
+        pid = _make_product(client)
+        url = client.get(f"/products/{pid}").json()["data"]["images"][0]
+        response = client.request(
+            "DELETE", f"/products/{pid}/images", json={"urls": [url]}
+        )
+        assert response.status_code == 401
 
 
 # ── DELETE /products/{product_id}/images/{image_key} ─────────────────────────
@@ -310,7 +343,9 @@ class TestDeleteImageByKey:
         images = client.get(f"/products/{pid}").json()["data"]["images"]
         image_key = images[0].split("/")[-1]
 
-        response = client.delete(f"/products/{pid}/images/{image_key}")
+        response = client.delete(
+            f"/products/{pid}/images/{image_key}", headers=AUTH_HEADERS
+        )
 
         assert response.status_code == 409
 
@@ -320,12 +355,14 @@ class TestDeleteImageByKey:
         storage_mock.delete.reset_mock()
         image_key = images[0].split("/")[-1]
 
-        client.delete(f"/products/{pid}/images/{image_key}")
+        client.delete(f"/products/{pid}/images/{image_key}", headers=AUTH_HEADERS)
 
         assert storage_mock.delete.call_count == 0
 
     def test_returns_404_for_nonexistent_product(self, client: TestClient) -> None:
-        response = client.delete(f"/products/{uuid4()}/images/ghost.jpg")
+        response = client.delete(
+            f"/products/{uuid4()}/images/ghost.jpg", headers=AUTH_HEADERS
+        )
 
         assert response.status_code == 404
         assert response.json()["type"] == "about:blank"
@@ -333,7 +370,9 @@ class TestDeleteImageByKey:
     def test_returns_404_for_key_not_in_product(self, client: TestClient) -> None:
         pid = _make_product(client)
 
-        response = client.delete(f"/products/{pid}/images/nonexistent.jpg")
+        response = client.delete(
+            f"/products/{pid}/images/nonexistent.jpg", headers=AUTH_HEADERS
+        )
 
         assert response.status_code == 404
         body = response.json()
@@ -347,7 +386,9 @@ class TestDeleteImageByKey:
         images = client.get(f"/products/{pid}").json()["data"]["images"]
         image_key = images[0].split("/")[-1]
 
-        response = client.delete(f"/products/{pid}/images/{image_key}")
+        response = client.delete(
+            f"/products/{pid}/images/{image_key}", headers=AUTH_HEADERS
+        )
 
         assert response.status_code == 409
         body = response.json()
@@ -359,10 +400,12 @@ class TestDeleteImageByKey:
     ) -> None:
         pid = _make_product(client)
         images = client.get(f"/products/{pid}").json()["data"]["images"]
-        client.patch(f"/products/{pid}", json={"status": "inactive"})
+        client.patch(f"/products/{pid}", json={"status": "inactive"}, headers=AUTH_HEADERS)
         image_key = images[0].split("/")[-1]
 
-        response = client.delete(f"/products/{pid}/images/{image_key}")
+        response = client.delete(
+            f"/products/{pid}/images/{image_key}", headers=AUTH_HEADERS
+        )
 
         assert response.status_code == 409
 
@@ -371,16 +414,27 @@ class TestDeleteImageByKey:
     ) -> None:
         pid = _make_product(client)
         images = client.post(
-            f"/products/{pid}/images", files=[image_file("extra.jpg")]
+            f"/products/{pid}/images",
+            files=[image_file("extra.jpg")],
+            headers=AUTH_HEADERS,
         ).json()["data"]["images"]
         key_to_delete = images[1].split("/")[-1]
 
-        response = client.delete(f"/products/{pid}/images/{key_to_delete}")
+        response = client.delete(
+            f"/products/{pid}/images/{key_to_delete}", headers=AUTH_HEADERS
+        )
 
         assert response.status_code == 200
         remaining = response.json()["data"]["images"]
         assert len(remaining) == 1
         assert images[0] in remaining
+
+    def test_requires_auth(self, client: TestClient) -> None:
+        pid = _make_product(client)
+        images = client.get(f"/products/{pid}").json()["data"]["images"]
+        image_key = images[0].split("/")[-1]
+        response = client.delete(f"/products/{pid}/images/{image_key}")
+        assert response.status_code == 401
 
 
 # ── DELETE /products/{product_id}/images/bulk ─────────────────────────────────
@@ -392,12 +446,16 @@ class TestBulkDeleteImagesByKeys:
         images = client.post(
             f"/products/{pid}/images",
             files=[image_file("a.jpg"), image_file("b.jpg")],
+            headers=AUTH_HEADERS,
         ).json()["data"]["images"]
         # images = [creation_img, a.jpg, b.jpg]
         keys = [images[1].split("/")[-1], images[2].split("/")[-1]]
 
         response = client.request(
-            "DELETE", f"/products/{pid}/images/bulk", json={"image_keys": keys}
+            "DELETE",
+            f"/products/{pid}/images/bulk",
+            json={"image_keys": keys},
+            headers=AUTH_HEADERS,
         )
 
         assert response.status_code == 200
@@ -414,12 +472,16 @@ class TestBulkDeleteImagesByKeys:
         images = client.post(
             f"/products/{pid}/images",
             files=[image_file("a.jpg"), image_file("b.jpg")],
+            headers=AUTH_HEADERS,
         ).json()["data"]["images"]
         keys = [images[1].split("/")[-1], images[2].split("/")[-1]]
         storage_mock.delete.reset_mock()
 
         client.request(
-            "DELETE", f"/products/{pid}/images/bulk", json={"image_keys": keys}
+            "DELETE",
+            f"/products/{pid}/images/bulk",
+            json={"image_keys": keys},
+            headers=AUTH_HEADERS,
         )
 
         assert storage_mock.delete.call_count == 2
@@ -429,6 +491,7 @@ class TestBulkDeleteImagesByKeys:
             "DELETE",
             f"/products/{uuid4()}/images/bulk",
             json={"image_keys": ["ghost.jpg"]},
+            headers=AUTH_HEADERS,
         )
 
         assert response.status_code == 404
@@ -441,6 +504,7 @@ class TestBulkDeleteImagesByKeys:
             "DELETE",
             f"/products/{pid}/images/bulk",
             json={"image_keys": ["nonexistent.jpg"]},
+            headers=AUTH_HEADERS,
         )
 
         assert response.status_code == 404
@@ -457,7 +521,10 @@ class TestBulkDeleteImagesByKeys:
         image_key = images[0].split("/")[-1]
 
         response = client.request(
-            "DELETE", f"/products/{pid}/images/bulk", json={"image_keys": [image_key]}
+            "DELETE",
+            f"/products/{pid}/images/bulk",
+            json={"image_keys": [image_key]},
+            headers=AUTH_HEADERS,
         )
 
         assert response.status_code == 409
@@ -470,14 +537,26 @@ class TestBulkDeleteImagesByKeys:
     ) -> None:
         pid = _make_product(client)
         images = client.get(f"/products/{pid}").json()["data"]["images"]
-        client.patch(f"/products/{pid}", json={"status": "inactive"})
+        client.patch(f"/products/{pid}", json={"status": "inactive"}, headers=AUTH_HEADERS)
         keys = [img.split("/")[-1] for img in images]
 
         response = client.request(
-            "DELETE", f"/products/{pid}/images/bulk", json={"image_keys": keys}
+            "DELETE",
+            f"/products/{pid}/images/bulk",
+            json={"image_keys": keys},
+            headers=AUTH_HEADERS,
         )
 
         assert response.status_code == 409
+
+    def test_requires_auth(self, client: TestClient) -> None:
+        pid = _make_product(client)
+        images = client.get(f"/products/{pid}").json()["data"]["images"]
+        image_key = images[0].split("/")[-1]
+        response = client.request(
+            "DELETE", f"/products/{pid}/images/bulk", json={"image_keys": [image_key]}
+        )
+        assert response.status_code == 401
 
 
 # ── PATCH /products/{id}/images/order ────────────────────────────────────────
@@ -489,11 +568,14 @@ class TestReorderImages:
         images = client.post(
             f"/products/{pid}/images",
             files=[image_file("a.jpg"), image_file("b.jpg")],
+            headers=AUTH_HEADERS,
         ).json()["data"]["images"]
         new_order = [images[2], images[0], images[1]]
 
         response = client.patch(
-            f"/products/{pid}/images/order", json={"urls": new_order}
+            f"/products/{pid}/images/order",
+            json={"urls": new_order},
+            headers=AUTH_HEADERS,
         )
 
         assert response.status_code == 200
@@ -503,6 +585,7 @@ class TestReorderImages:
         response = client.patch(
             f"/products/{uuid4()}/images/order",
             json={"urls": [f"{_CDN_BASE}/products/fake/img.jpg"]},
+            headers=AUTH_HEADERS,
         )
 
         assert response.status_code == 404
@@ -512,10 +595,13 @@ class TestReorderImages:
         images = client.post(
             f"/products/{pid}/images",
             files=[image_file("a.jpg"), image_file("b.jpg")],
+            headers=AUTH_HEADERS,
         ).json()["data"]["images"]
 
         response = client.patch(
-            f"/products/{pid}/images/order", json={"urls": [images[0]]}
+            f"/products/{pid}/images/order",
+            json={"urls": [images[0]]},
+            headers=AUTH_HEADERS,
         )
 
         assert response.status_code == 400
@@ -528,6 +614,7 @@ class TestReorderImages:
         response = client.patch(
             f"/products/{pid}/images/order",
             json={"urls": [images[0], extra]},
+            headers=AUTH_HEADERS,
         )
 
         assert response.status_code == 400
@@ -537,11 +624,13 @@ class TestReorderImages:
         images = client.post(
             f"/products/{pid}/images",
             files=[image_file("a.jpg"), image_file("b.jpg")],
+            headers=AUTH_HEADERS,
         ).json()["data"]["images"]
 
         response = client.patch(
             f"/products/{pid}/images/order",
             json={"urls": [images[0], images[0]]},
+            headers=AUTH_HEADERS,
         )
 
         assert response.status_code == 400
@@ -551,13 +640,23 @@ class TestReorderImages:
         images = client.post(
             f"/products/{pid}/images",
             files=[image_file("a.jpg"), image_file("b.jpg")],
+            headers=AUTH_HEADERS,
         ).json()["data"]["images"]
         before = client.get(f"/products/{pid}").json()["data"]["updatedAt"]
 
         client.patch(
             f"/products/{pid}/images/order",
             json={"urls": [images[2], images[1], images[0]]},
+            headers=AUTH_HEADERS,
         )
 
         after = client.get(f"/products/{pid}").json()["data"]["updatedAt"]
         assert after >= before
+
+    def test_requires_auth(self, client: TestClient) -> None:
+        pid = _make_product(client)
+        images = client.get(f"/products/{pid}").json()["data"]["images"]
+        response = client.patch(
+            f"/products/{pid}/images/order", json={"urls": images}
+        )
+        assert response.status_code == 401
