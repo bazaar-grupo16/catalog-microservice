@@ -17,11 +17,11 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from tests.conftest import PRODUCT_IMAGE, _CDN_BASE
+from tests.conftest import PRODUCT_IMAGE, _CDN_BASE, make_auth_headers
 
-# Header used for all authenticated requests in tests that don't need a
+# Headers used for all authenticated requests in tests that don't need a
 # specific seller identity.
-AUTH_HEADERS = {"X-User-ID": "00000000-0000-0000-0000-000000000001"}
+AUTH_HEADERS = make_auth_headers("00000000-0000-0000-0000-000000000001")
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

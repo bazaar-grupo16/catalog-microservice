@@ -12,12 +12,18 @@ uploads are made.  Dummy SPACES_* values are set below so that
 """
 
 import os
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
-# Set dummy Spaces credentials before any src module is imported.
+import jwt as _jwt
+
+# Set dummy credentials before any src module is imported.
 # get_settings() validates all fields at first call (triggered by the
 # database module import below), so these must be in place beforehand.
 # docker-compose.test.yml also sets them for CI runs.
+_TEST_SECRET_KEY = "test-secret-key"
+_TEST_JWT_ALGORITHM = "HS256"
+
 for _k, _v in [
     ("SPACES_KEY", "test-key"),
     ("SPACES_SECRET", "test-secret"),
@@ -26,8 +32,22 @@ for _k, _v in [
     ("SPACES_ENDPOINT", "https://nyc3.digitaloceanspaces.com"),
     ("SPACES_CDN_ENDPOINT", "https://bazaar-media.nyc3.cdn.digitaloceanspaces.com"),
     ("PUBLIC_APP_BASE_URL", "http://test-catalog.example.com"),
+    ("SECRET_KEY", _TEST_SECRET_KEY),
 ]:
     os.environ.setdefault(_k, _v)
+
+
+def make_auth_headers(user_id: str = "00000000-0000-0000-0000-000000000001") -> dict:
+    """Return Authorization headers with a valid test JWT for the given user_id."""
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": user_id,
+        "type": "access",
+        "iat": now,
+        "exp": now + timedelta(hours=1),
+    }
+    token = _jwt.encode(payload, _TEST_SECRET_KEY, algorithm=_TEST_JWT_ALGORITHM)
+    return {"Authorization": f"Bearer {token}"}
 
 import pytest
 from fastapi.testclient import TestClient

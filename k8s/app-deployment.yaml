@@ -86,6 +86,16 @@ spec:
                 secretKeyRef:
                   name: catalog-db-credentials
                   key: PUBLIC_APP_BASE_URL
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: catalog-db-credentials
+                  key: SECRET_KEY
+            - name: JWT_ALGORITHM
+              valueFrom:
+                secretKeyRef:
+                  name: catalog-db-credentials
+                  key: JWT_ALGORITHM
             - name: INVENTORY_SERVICE_URL
               value: "http://inventory-service"
           # ── Probes ─────────────────────────────────
