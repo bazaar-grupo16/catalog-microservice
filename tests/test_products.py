@@ -1083,7 +1083,7 @@ class TestAuthRequired:
 
 
 class TestGetMyProducts:
-    """GET /products/me — seller's own product listing."""
+    """GET /my-products — seller's own product listing."""
 
     def test_returns_own_products(self, client: TestClient) -> None:
         seller_id = str(uuid4())
@@ -1100,7 +1100,7 @@ class TestGetMyProducts:
             headers=make_auth_headers(str(uuid4())),
         )
 
-        response = client.get("/products/me", headers=make_auth_headers(seller_id))
+        response = client.get("/my-products", headers=make_auth_headers(seller_id))
 
         assert response.status_code == 200
         body = response.json()
@@ -1108,7 +1108,7 @@ class TestGetMyProducts:
         assert body["data"][0]["title"] == "My Product"
 
     def test_returns_empty_when_no_products(self, client: TestClient) -> None:
-        response = client.get("/products/me", headers=make_auth_headers(str(uuid4())))
+        response = client.get("/my-products", headers=make_auth_headers(str(uuid4())))
 
         assert response.status_code == 200
         body = response.json()
@@ -1141,7 +1141,7 @@ class TestGetMyProducts:
             f"/products/{inactive}", json={"status": "inactive"}, headers=make_auth_headers(seller_id)
         )
 
-        response = client.get("/products/me", headers=make_auth_headers(seller_id))
+        response = client.get("/my-products", headers=make_auth_headers(seller_id))
 
         assert response.status_code == 200
         body = response.json()
@@ -1150,5 +1150,5 @@ class TestGetMyProducts:
         assert {active, inactive, out_of_stock} == ids
 
     def test_returns_401_without_header(self, client: TestClient) -> None:
-        response = client.get("/products/me")
+        response = client.get("/my-products")
         assert response.status_code == 401

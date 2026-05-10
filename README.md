@@ -33,7 +33,8 @@ Microservicio de catálogo de productos para la plataforma Bazaar. Expone una AP
 │   │   ├── controllers/        # Cableado de dependencias y mapeo request/response
 │   │   │   └── product.py      # ProductController: instancia repo y servicio, convierte schemas a DTOs
 │   │   ├── routers/            # Registro de rutas — solo delegan al controller
-│   │   │   └── product.py      # Rutas de /products
+│   │   │   ├── product.py      # Rutas de /products
+│   │   │   └── my_products.py  # Rutas de /my-products (autenticado via NGINX)
 │   │   └── health.py           # /livez y /readyz
 │   ├── core/                   # Concerns transversales
 │   │   ├── config.py           # Configuración desde variables de entorno
@@ -87,20 +88,23 @@ Microservicio de catálogo de productos para la plataforma Bazaar. Expone una AP
 
 ## Autenticación
 
-El catalog-service valida el JWT **directamente**, sin depender del Ingress. Lee el header `Authorization: Bearer <token>`, lo decodifica con `SECRET_KEY` y `JWT_ALGORITHM` (HS256), y extrae el `user_id` del claim `sub`.
+El catalog-service usa dos mecanismos de autenticación según el endpoint:
+
+- **`GET /my-products`**: NGINX valida el JWT en el `auth-url` del `catalog-auth-ingress` y, si es válido, inyecta el `X-User-ID` en el request antes de forwardearlo al servicio. El servicio lee ese header directamente.
+- **`POST /products`, `PATCH /products/{id}`, `DELETE /products/{id}` y endpoints de imágenes**: el servicio valida el JWT del header `Authorization: Bearer <token>` directamente, usando `SECRET_KEY` y `JWT_ALGORITHM` (HS256).
 
 Los endpoints que requieren autenticación devuelven `401` en formato `application/problem+json` si el header está ausente, el token está expirado o es inválido. Los endpoints públicos no requieren token.
 
 | Visibilidad | Endpoints |
 |-------------|-----------|
 | **Públicos** (sin auth) | `GET /products`, `GET /products/{id}`, `GET /products/{id}/share-link`, `GET /livez`, `GET /readyz`, `PATCH /internal/products/{id}/stock-status` |
-| **Autenticados** (requieren `Authorization: Bearer <token>`) | `POST /products`, `GET /products/me`, `PATCH /products/{id}`, `DELETE /products/{id}`, y todos los endpoints de imágenes |
+| **Auth via NGINX** (`X-User-ID` inyectado por el Ingress) | `GET /my-products` |
+| **Auth via JWT** (requieren `Authorization: Bearer <token>`) | `POST /products`, `PATCH /products/{id}`, `DELETE /products/{id}`, y todos los endpoints de imágenes |
 
-El Ingress es un único recurso **`catalog-ingress`** sin anotaciones de autenticación — la validación del JWT ocurre dentro del propio servicio.
+El Ingress está dividido en dos recursos:
 
-**¿Por qué el catalog-service valida el JWT directamente?**
-
-El catalog-service tiene endpoints mixtos: algunos públicos (`GET /products`, `GET /products/{id}`) y otros autenticados (`POST /products`, `GET /products/me`) sobre los mismos paths base. NGINX Ingress no soporta auth selectiva por método HTTP — la anotación `auth-url` se aplica a todos los requests que matchean un path, sin distinción de método. Separar en dos recursos Ingress tampoco funciona cuando los paths se solapan, ya que NGINX no garantiza que el más específico gane entre recursos distintos. Por eso la validación del JWT se movió al propio servicio, que puede aplicarla selectivamente por endpoint. La decisión está documentada en el ADR correspondiente.
+- **`catalog-public-ingress`**: enruta `/catalog/products*` sin autenticación.
+- **`catalog-auth-ingress`**: enruta `/catalog/my-products*` con `auth-url` apuntando al auth-service. Si el token es válido, NGINX inyecta `X-User-ID` en el request.
 
 ## Despliegue
 
@@ -116,7 +120,7 @@ El flujo de CI/CD ejecuta:
 
 La app corre dentro del contenedor en el puerto `8000`. El `Service` interno la publica dentro del cluster y el Ingress de Nginx expone el acceso HTTP externo.
 
-El Ingress es un único recurso `catalog-ingress` (ver `k8s/ingress.yaml`) que reescribe el prefijo `/catalog` antes de forwwardear al pod:
+El Ingress está dividido en dos recursos en `k8s/ingress.yaml`: `catalog-public-ingress` para rutas públicas (`/catalog/products*`) y `catalog-auth-ingress` para rutas autenticadas (`/catalog/my-products*`). Ambos reescriben el prefijo `/catalog` antes de forwwardear al pod:
 
 ```
 http://<cluster-host>/catalog/<endpoint>
@@ -176,9 +180,9 @@ Si el producto se crea con `stock=0`, queda en estado `out_of_stock` desde el in
 
 ---
 
-#### `GET /products/me` — Mis productos
+#### `GET /my-products` — Mis productos
 
-Devuelve todas las publicaciones del vendedor autenticado, **incluyendo** productos con status `inactive` o `out_of_stock` (el vendedor ve su catálogo completo).
+Devuelve todas las publicaciones del vendedor autenticado, **incluyendo** productos con status `inactive` o `out_of_stock` (el vendedor ve su catálogo completo). Requiere autenticación via NGINX (`X-User-ID` inyectado por el `catalog-auth-ingress`).
 
 **Query params:** `limit`, `offset`, `search_query`, `sort_by`, `order` (mismos que `GET /products`).
 
