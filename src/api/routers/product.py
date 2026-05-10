@@ -8,10 +8,12 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, Response, UploadFile
 
 from src.api.controllers import ProductController
-from src.core.dependencies import DbSession
+from src.core.dependencies import DbSession, UserID
 from src.schemas import (
     BulkDeleteImageKeysRequest,
     DeleteImagesRequest,
+    ErrorResponse,
+    MyProductsFilters,
     ProductCreateForm,
     ProductListRequest,
     ProductListResponse,
@@ -19,7 +21,6 @@ from src.schemas import (
     ProductUpdateRequest,
     ReorderImagesRequest,
     ShareLinkResponse,
-    ErrorResponse,
 )
 
 
@@ -39,22 +40,25 @@ router = APIRouter(
     response_model=ProductResponse,
     description=(
         "Creates a new product publication in the catalog. "
-        "Requires at least one image (JPEG, PNG or WebP; max 10 MB each)."
+        "Requires at least one image (JPEG, PNG or WebP; max 10 MB each). "
+        "The seller is identified by the X-User-ID header."
     ),
     responses={
         201: {"description": "Product created successfully"},
         400: {"description": "Image validation failed", "model": ErrorResponse},
+        401: {"description": "Missing or invalid X-User-ID header", "model": ErrorResponse},
     },
 )
 async def create_product(
     db: DbSession,
+    user_id: UserID,
     form: Annotated[ProductCreateForm, Depends()],
     files: Annotated[
         list[UploadFile],
         File(description="Product images (JPEG, PNG or WebP; max 10 MB each)"),
     ],
 ) -> ProductResponse:
-    return await ProductController(db).create_product(form, files)
+    return await ProductController(db).create_product(form, files, user_id)
 
 
 @router.get(
@@ -73,6 +77,27 @@ async def get_products(
     filters: Annotated[ProductListRequest, Depends()],
 ) -> ProductListResponse:
     return await ProductController(db).get_products(filters)
+
+
+@router.get(
+    "/me",
+    summary="Get current user's products",
+    response_model=ProductListResponse,
+    description=(
+        "Returns all products belonging to the authenticated seller, "
+        "including inactive and out-of-stock listings."
+    ),
+    responses={
+        200: {"description": "A list of the authenticated user's products"},
+        401: {"description": "Missing or invalid X-User-ID header", "model": ErrorResponse},
+    },
+)
+async def get_my_products(
+    db: DbSession,
+    user_id: UserID,
+    filters: Annotated[MyProductsFilters, Depends()],
+) -> ProductListResponse:
+    return await ProductController(db).get_my_products(user_id, filters)
 
 
 @router.get(
@@ -114,12 +139,14 @@ async def get_product(
     ),
     responses={
         204: {"description": "Product deleted successfully"},
+        401: {"description": "Missing or invalid X-User-ID header", "model": ErrorResponse},
         404: {"description": "Product not found", "model": ErrorResponse},
     },
 )
 async def delete_product(
     id: UUID,
     db: DbSession,
+    user_id: UserID,
 ) -> Response:
     await ProductController(db).delete_product(id)
     return Response(status_code=204)
@@ -130,11 +157,15 @@ async def delete_product(
     response_model=ProductResponse,
     summary="Update product",
     description="Partially updates a product. Only the provided fields are modified.",
+    responses={
+        401: {"description": "Missing or invalid X-User-ID header", "model": ErrorResponse},
+    },
 )
 async def update_product(
     id: UUID,
     payload: ProductUpdateRequest,
     db: DbSession,
+    user_id: UserID,
 ) -> ProductResponse:
     return await ProductController(db).update_product(id, payload)
 
@@ -151,12 +182,14 @@ async def update_product(
     responses={
         200: {"description": "Images uploaded and product returned"},
         400: {"description": "File validation failed", "model": ErrorResponse},
+        401: {"description": "Missing or invalid X-User-ID header", "model": ErrorResponse},
         404: {"description": "Product not found", "model": ErrorResponse},
     },
 )
 async def add_images(
     id: UUID,
     db: DbSession,
+    user_id: UserID,
     files: Annotated[list[UploadFile], File(description="Image files to upload")],
 ) -> ProductResponse:
     return await ProductController(db).add_images(id, files)
@@ -177,6 +210,7 @@ async def add_images(
             "description": "One or more URLs not found in product",
             "model": ErrorResponse,
         },
+        401: {"description": "Missing or invalid X-User-ID header", "model": ErrorResponse},
         404: {"description": "Product not found", "model": ErrorResponse},
         409: {
             "description": "Would leave product with no images",
@@ -188,6 +222,7 @@ async def delete_images(
     id: UUID,
     payload: DeleteImagesRequest,
     db: DbSession,
+    user_id: UserID,
 ) -> ProductResponse:
     return await ProductController(db).delete_images(id, payload)
 
@@ -203,6 +238,7 @@ async def delete_images(
     ),
     responses={
         200: {"description": "Images deleted and product returned"},
+        401: {"description": "Missing or invalid X-User-ID header", "model": ErrorResponse},
         404: {
             "description": "Product or one or more image keys not found",
             "model": ErrorResponse,
@@ -217,6 +253,7 @@ async def bulk_delete_images(
     product_id: UUID,
     payload: BulkDeleteImageKeysRequest,
     db: DbSession,
+    user_id: UserID,
 ) -> ProductResponse:
     return await ProductController(db).bulk_delete_images_by_keys(product_id, payload)
 
@@ -232,6 +269,7 @@ async def bulk_delete_images(
     ),
     responses={
         200: {"description": "Image deleted and product returned"},
+        401: {"description": "Missing or invalid X-User-ID header", "model": ErrorResponse},
         404: {
             "description": "Product or image key not found",
             "model": ErrorResponse,
@@ -246,6 +284,7 @@ async def delete_image_by_key(
     product_id: UUID,
     image_key: str,
     db: DbSession,
+    user_id: UserID,
 ) -> ProductResponse:
     return await ProductController(db).delete_image_by_key(product_id, image_key)
 
@@ -265,6 +304,7 @@ async def delete_image_by_key(
             "description": "URL set does not match current images",
             "model": ErrorResponse,
         },
+        401: {"description": "Missing or invalid X-User-ID header", "model": ErrorResponse},
         404: {"description": "Product not found", "model": ErrorResponse},
     },
 )
@@ -272,5 +312,6 @@ async def reorder_images(
     id: UUID,
     payload: ReorderImagesRequest,
     db: DbSession,
+    user_id: UserID,
 ) -> ProductResponse:
     return await ProductController(db).reorder_images(id, payload)

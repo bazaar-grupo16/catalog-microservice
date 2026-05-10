@@ -3,6 +3,7 @@
 from src.schemas.product import (
     BulkDeleteImageKeysRequest,
     DeleteImagesRequest,
+    MyProductsFilters,
     ProductCreateForm,
     ProductListRequest,
     ProductListResponse,
@@ -18,6 +19,7 @@ from src.schemas.error import ErrorResponse
 
 __all__ = [
     "ProductCreateForm",
+    "MyProductsFilters",
     "ProductListRequest",
     "ProductListResponse",
     "ProductResponse",
