@@ -15,7 +15,7 @@ def test_get_product_stock_reads_wrapped_inventory_response(monkeypatch) -> None
     product_id = uuid4()
     monkeypatch.setenv("INVENTORY_SERVICE_URL", "http://inventory-service")
 
-    def fake_get(url: str) -> httpx.Response:
+    def fake_get(url: str, headers: dict[str, str] | None = None) -> httpx.Response:
         assert url == f"http://inventory-service/internal/products/{product_id}/stock"
         return httpx.Response(
             200,
@@ -38,7 +38,7 @@ def test_get_product_stock_accepts_legacy_unwrapped_response(monkeypatch) -> Non
     product_id = uuid4()
     monkeypatch.setenv("INVENTORY_SERVICE_URL", "http://inventory-service")
 
-    def fake_get(url: str) -> httpx.Response:
+    def fake_get(url: str, headers: dict[str, str] | None = None) -> httpx.Response:
         assert url == f"http://inventory-service/internal/products/{product_id}/stock"
         return httpx.Response(
             200,
