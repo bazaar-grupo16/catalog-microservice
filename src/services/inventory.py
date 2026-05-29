@@ -12,6 +12,8 @@ from uuid import UUID
 
 import httpx
 
+from src.core.observability import build_observability_headers
+
 
 class InventoryService:
     """HTTP client for the inventory microservice."""
@@ -24,18 +26,21 @@ class InventoryService:
         httpx.post(
             f"{self.base_url}/internal/products/{product_id}/stock",
             json={"quantity": initial_stock},
+            headers=build_observability_headers(),
         ).raise_for_status()
 
     def delete_product_stock(self, product_id: UUID) -> None:
         """Remove a product's stock entry from inventory."""
         httpx.delete(
             f"{self.base_url}/internal/products/{product_id}/stock",
+            headers=build_observability_headers(),
         ).raise_for_status()
 
     def get_product_stock(self, product_id: UUID) -> int:
         """Return the current stock for a single product."""
         response = httpx.get(
             f"{self.base_url}/internal/products/{product_id}/stock",
+            headers=build_observability_headers(),
         )
         response.raise_for_status()
         body = response.json()
@@ -47,6 +52,7 @@ class InventoryService:
         response = httpx.post(
             f"{self.base_url}/internal/products/stocks",
             json={"product_ids": [str(p) for p in product_ids]},
+            headers=build_observability_headers(),
         )
         response.raise_for_status()
         return {UUID(k): v for k, v in response.json()["data"].items()}
@@ -56,4 +62,5 @@ class InventoryService:
         httpx.put(
             f"{self.base_url}/internal/products/{product_id}/stock",
             json={"quantity": new_stock},
+            headers=build_observability_headers(),
         ).raise_for_status()

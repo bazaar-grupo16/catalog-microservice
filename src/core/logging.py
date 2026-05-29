@@ -15,6 +15,23 @@ import sys
 from typing import Optional
 
 from src.core.config import get_settings
+from src.core.observability import ObservabilityJSONFormatter
+
+
+_HEALTH_PROBE_PATHS = {"/livez", "/readyz"}
+
+
+class HealthProbeAccessLogFilter(logging.Filter):
+    """Suppress access logs for the health probe endpoints."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.name != "uvicorn.access":
+            return True
+
+        if not isinstance(record.args, tuple) or len(record.args) < 3:
+            return True
+
+        return record.args[2] not in _HEALTH_PROBE_PATHS
 
 
 def setup_logging(level_override: Optional[str] = None) -> None:
@@ -30,15 +47,7 @@ def setup_logging(level_override: Optional[str] = None) -> None:
     level_name = (level_override or settings.LOG_LEVEL).upper()
     level = getattr(logging, level_name, logging.INFO)
 
-    formatter = logging.Formatter(
-        fmt=(
-            '{"time":"%(asctime)s",'
-            '"level":"%(levelname)s",'
-            '"logger":"%(name)s",'
-            '"message":"%(message)s"}'
-        ),
-        datefmt="%Y-%m-%dT%H:%M:%S%z",
-    )
+    formatter = ObservabilityJSONFormatter()
 
     handler = logging.StreamHandler(stream=sys.stdout)
     handler.setFormatter(formatter)
@@ -48,3 +57,7 @@ def setup_logging(level_override: Optional[str] = None) -> None:
     # Avoid duplicate handlers on repeated calls.
     root.handlers.clear()
     root.addHandler(handler)
+
+    access_logger = logging.getLogger("uvicorn.access")
+    if not any(isinstance(item, HealthProbeAccessLogFilter) for item in access_logger.filters):
+        access_logger.addFilter(HealthProbeAccessLogFilter())
