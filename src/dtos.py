@@ -42,6 +42,7 @@ class ProductFilterDTO:
     category: str | None = None
     seller_id: UUID | None = None
     include_inactive: bool = False
+    include_blocked: bool = False
     sort_by: ProductSortBy | None = None
     order: SortOrder = SortOrder.ASC
     min_price: float | None = None

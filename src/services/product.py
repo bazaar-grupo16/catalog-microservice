@@ -310,3 +310,29 @@ class ProductService:
         """Reject operations that would leave a product without any images."""
         if not remaining:
             raise EmptyActiveProductImages()
+        
+    def block_product(self, product_id: UUID, admin_id: UUID) -> Product:
+        """Admin only: flag a product as blocked, hiding it from the catalog."""
+        product = self.repository.find_by_id(product_id)
+        if product is None:
+            raise ProductNotFound(product_id)
+        
+        if not product.is_blocked:
+            product.is_blocked = True
+            product.updated_at = utc_now()
+            product = self.repository.save(product)
+            
+        return self._enrich_stock(product)
+
+    def unblock_product(self, product_id: UUID, admin_id: UUID) -> Product:
+        """Admin only: remove the block flag from a product."""
+        product = self.repository.find_by_id(product_id)
+        if product is None:
+            raise ProductNotFound(product_id)
+            
+        if product.is_blocked:
+            product.is_blocked = False
+            product.updated_at = utc_now()
+            product = self.repository.save(product)
+            
+        return self._enrich_stock(product)

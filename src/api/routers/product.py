@@ -294,3 +294,38 @@ async def reorder_images(
     user_id: UserID,
 ) -> ProductResponse:
     return await ProductController(db).reorder_images(id, payload)
+
+@router.patch(
+    "/{id}/block",
+    response_model=ProductResponse,
+    summary="Block a product",
+    description="Admin only: disables a product from public view.",
+    responses={
+        401: {"description": "Missing or invalid X-User-ID header", "model": ErrorResponse},
+        404: {"description": "Product not found", "model": ErrorResponse},
+    },
+)
+async def block_product(
+    id: UUID,
+    db: DbSession,
+    user_id: UserID,
+) -> ProductResponse:
+    return await ProductController(db).block_product(id, user_id)
+
+
+@router.patch(
+    "/{id}/unblock",
+    response_model=ProductResponse,
+    summary="Unblock a product",
+    description="Admin only: reinstates a previously blocked product.",
+    responses={
+        401: {"description": "Missing or invalid X-User-ID header", "model": ErrorResponse},
+        404: {"description": "Product not found", "model": ErrorResponse},
+    },
+)
+async def unblock_product(
+    id: UUID,
+    db: DbSession,
+    user_id: UserID,
+) -> ProductResponse:
+    return await ProductController(db).unblock_product(id, user_id)

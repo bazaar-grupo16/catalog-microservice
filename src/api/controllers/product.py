@@ -77,6 +77,7 @@ class ProductController:
             category=filters.category,
             seller_id=filters.seller_id,
             include_inactive=filters.include_inactive,
+            include_blocked=filters.include_blocked,
             sort_by=filters.sort_by,
             order=filters.order,
             min_price=filters.min_price,
@@ -164,4 +165,12 @@ class ProductController:
         product = self.service.bulk_delete_images_by_keys(
             product_id, BulkDeleteImagesByKeysDTO(image_keys=payload.image_keys)
         )
+        return ProductResponse(data=product)
+    
+    async def block_product(self, product_id: UUID, user_id: UUID) -> ProductResponse:
+        product = self.service.block_product(product_id, user_id)
+        return ProductResponse(data=product)
+
+    async def unblock_product(self, product_id: UUID, user_id: UUID) -> ProductResponse:
+        product = self.service.unblock_product(product_id, user_id)
         return ProductResponse(data=product)
