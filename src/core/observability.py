@@ -56,7 +56,7 @@ def resolve_correlation_id(headers: Mapping[str, str]) -> str:
         if correlation_id:
             return correlation_id
 
-    return str(uuid4())
+    return uuid4().hex
 
 
 def _current_span_ids() -> tuple[str | None, str | None]:
