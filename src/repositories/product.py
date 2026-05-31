@@ -53,8 +53,8 @@ class ProductRepository:
         order_by = [Product.created_at.desc()]
 
         if not dto.include_blocked:
-            filters.append(Product.is_blocked == False)
-            
+            filters.append( not Product.is_blocked)
+
         if dto.include_inactive:
             if dto.category is not None:
                 filters.append(Product.category == dto.category.strip().lower())
