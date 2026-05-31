@@ -14,6 +14,9 @@ spec:
       app: catalog-service
   template:
     metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
       labels:
         app: catalog-service
     spec:
@@ -98,7 +101,16 @@ spec:
                   key: JWT_ALGORITHM
             - name: INVENTORY_SERVICE_URL
               value: "http://inventory-service"
-          # ── Probes ─────────────────────────────────
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector:4317"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "grpc"
+            - name: OTEL_SERVICE_NAME
+              value: catalog-service
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "deployment.environment=dev,k8s.cluster.name=bazaar-dev"
+            - name: OTEL_PROPAGATORS
+              value: "tracecontext,baggage"
           livenessProbe:
             httpGet:
               path: /livez
