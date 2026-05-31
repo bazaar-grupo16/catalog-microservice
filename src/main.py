@@ -22,11 +22,14 @@ from src.core.config import get_settings
 from src.core.database import Base, engine, setup_search_extensions, wait_for_db
 from src.core.logging import setup_logging
 from src.core.observability import CorrelationIdMiddleware
+from src.core.telemetry import initialize_prometheus_metrics, router as metrics_router
 from src.models import Product  # noqa: F401
 
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+
+initialize_prometheus_metrics()
 
 
 @asynccontextmanager
@@ -53,6 +56,7 @@ app.add_middleware(CorrelationIdMiddleware)
 
 # ── Routers ──────────────────────────────────────────
 app.include_router(health_router)
+app.include_router(metrics_router)
 app.include_router(products_router)
 app.include_router(my_products_router)
 app.include_router(internal_router)

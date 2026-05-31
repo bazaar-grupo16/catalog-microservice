@@ -125,3 +125,11 @@ class TestObservability:
             assert headers is not None
             assert headers["X-Request-ID"] == request_id
             assert headers["X-Correlation-ID"] == request_id
+
+class TestMetricsEndpoint:
+    def test_returns_prometheus_text(self, client: TestClient) -> None:
+        response = client.get("/metrics")
+
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/plain; version=0.0.4")
+        assert response.text
