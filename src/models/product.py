@@ -7,7 +7,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, JSON, Numeric, String, Text
+from sqlalchemy import DateTime, JSON, Numeric, String, Text, Boolean, text
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
 
@@ -55,4 +55,7 @@ class Product(Base):
         JSON,
         nullable=False,
         default=list,
+    )
+    is_blocked: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
     )

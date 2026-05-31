@@ -32,6 +32,7 @@ class Product(BaseModel):
     created_at: datetime = Field(serialization_alias="createdAt")
     updated_at: datetime = Field(serialization_alias="updatedAt")
     images: list[str] = []
+    is_blocked: bool = Field(default=False, serialization_alias="adminDisabled")
 
 
 class ProductResponse(BaseModel):
@@ -47,6 +48,7 @@ class ProductListRequest:
         category: str | None = Query(default=None, min_length=1, max_length=150),
         seller_id: UUID | None = None,
         include_inactive: bool = False,
+        include_blocked: bool = False,
         sort_by: ProductSortBy | None = None,
         order: SortOrder = SortOrder.ASC,
         min_price: float | None = Query(default=None, gt=0),
@@ -58,6 +60,7 @@ class ProductListRequest:
         self.category = category
         self.seller_id = seller_id
         self.include_inactive = include_inactive
+        self.include_blocked = include_blocked
         self.sort_by = sort_by
         self.order = order
         self.min_price = min_price
