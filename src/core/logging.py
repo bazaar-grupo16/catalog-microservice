@@ -98,3 +98,11 @@ def setup_logging(level_override: Optional[str] = None) -> None:
     access_logger = logging.getLogger("uvicorn.access")
     if not any(isinstance(item, HealthProbeAccessLogFilter) for item in access_logger.filters):
         access_logger.addFilter(HealthProbeAccessLogFilter())
+
+    for uvicorn_logger_name in ("uvicorn", "uvicorn.access", "uvicorn.error"):
+        uvicorn_logger = logging.getLogger(uvicorn_logger_name)
+        uvicorn_logger.handlers.clear()
+        handler = logging.StreamHandler(stream=sys.stdout)
+        handler.setFormatter(formatter)
+        uvicorn_logger.addHandler(handler)
+        uvicorn_logger.propagate = False
