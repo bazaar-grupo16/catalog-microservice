@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextvars
+import os
 from collections.abc import Mapping
 from typing import Any
 from uuid import uuid4
@@ -66,6 +67,23 @@ def _current_span_ids() -> tuple[str | None, str | None]:
         return None, None
 
     return format(span_context.trace_id, "032x"), format(span_context.span_id, "016x")
+
+
+def _get_service_name() -> str:
+    """Resolve the service name from OTel env vars or resource attributes."""
+    service_name = os.getenv("OTEL_SERVICE_NAME", "").strip()
+    if service_name:
+        return service_name
+
+    resource_attributes = os.getenv("OTEL_RESOURCE_ATTRIBUTES", "")
+    for attribute in resource_attributes.split(","):
+        key, separator, value = attribute.partition("=")
+        if separator and key.strip() == "service.name":
+            cleaned_value = value.strip()
+            if cleaned_value:
+                return cleaned_value
+
+    return "unknown_service"
 
 
 def get_observability_correlation_id() -> str | None:
@@ -138,6 +156,7 @@ class ObservabilityJSONFormatter(jsonlogger.JsonFormatter):
             trace_id = trace_id or current_trace_id
             span_id = span_id or current_span_id
 
+        log_record["service_name"] = _get_service_name()
         log_record["correlation_id"] = correlation_id
         log_record["trace_id"] = trace_id
         log_record["span_id"] = span_id
