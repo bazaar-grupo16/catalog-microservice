@@ -434,6 +434,11 @@ El campo `stock` no se almacena en la base de datos del catalog. En cambio, `Inv
 
 Todas las respuestas que incluyen productos se enriquecen con el stock consultado al inventory service. `InventoryService` usa `INVENTORY_SERVICE_URL` como URL base y consume las rutas internas del microservicio privado de inventory.
 
+El `sellerId` del producto se origina en catalog y se conserva en las respuestas
+que consumen carrito/órdenes. Ese dato permite que, cuando una compra descuenta
+stock, `orders-service` pueda enviarlo a `inventory-service` y este genere
+notificaciones `low_stock` u `out_of_stock` dirigidas al vendedor correcto.
+
 El frontend NO consume inventory directamente. El cliente público debe seguir usando el gateway/Ingress de catalog, por ejemplo `http://bazaar.pib.ar/catalog`.
 
 **Variable de entorno:** `INVENTORY_SERVICE_URL` — URL base del inventory service.
