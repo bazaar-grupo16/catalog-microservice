@@ -178,3 +178,17 @@ class ShareLinkData(BaseModel):
 
 class ShareLinkResponse(BaseModel):
     data: ShareLinkData
+
+
+class ProductStatusHistoryEntry(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    previous_state: str | None = Field(default=None, serialization_alias="previousState")
+    new_state: str = Field(serialization_alias="newState")
+    changed_at: datetime = Field(serialization_alias="changedAt")
+    changed_by: UUID | None = Field(default=None, serialization_alias="changedBy")
+    changed_by_role: str | None = Field(default=None, serialization_alias="changedByRole")
+
+
+class ProductStatusHistoryResponse(BaseModel):
+    data: list[ProductStatusHistoryEntry]

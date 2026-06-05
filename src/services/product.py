@@ -29,7 +29,8 @@ from src.exceptions import (
     ProductNotFound,
 )
 from src.models import Product
-from src.repositories import ProductRepository
+from src.models.product_status_history import ProductStatusHistory
+from src.repositories import ProductRepository, ProductStatusHistoryRepository
 from src.services.inventory import InventoryService
 from src.services.storage import (
     ALLOWED_MIME_TYPES,
@@ -48,10 +49,12 @@ class ProductService:
         product_repository: ProductRepository,
         storage_service: StorageService,
         inventory_service: InventoryService,
+        history_repository: ProductStatusHistoryRepository,
     ) -> None:
         self.repository = product_repository
         self.storage = storage_service
         self.inventory = inventory_service
+        self.history = history_repository
 
     def create_product(
         self, dto: CreateProductDTO, images_dto: AddImagesDTO
@@ -129,11 +132,15 @@ class ProductService:
         self.repository.delete(product)
         self.inventory.delete_product_stock(product_id)
 
-    def update_product(self, product_id: UUID, dto: UpdateProductDTO) -> Product:
+    def update_product(
+        self, product_id: UUID, dto: UpdateProductDTO, changed_by: UUID
+    ) -> Product:
         """Partially update a product, delegating stock changes to inventory."""
         product = self.repository.find_by_id(product_id)
         if product is None:
             raise ProductNotFound(product_id)
+
+        old_state = self._effective_state(product)
 
         for field, value in vars(dto).items():
             if field == "stock" or value is None:
@@ -149,6 +156,16 @@ class ProductService:
                     dto.stock > 0 and product.status == ProductStatus.OUT_OF_STOCK.value
                 ):
                     product.status = ProductStatus.ACTIVE.value
+
+        new_state = self._effective_state(product)
+        if old_state != new_state:
+            self.history.stage(ProductStatusHistory(
+                product_id=product_id,
+                previous_state=old_state,
+                new_state=new_state,
+                changed_by=changed_by,
+                changed_by_role="seller",
+            ))
 
         product = self.repository.save(product)
         return self._enrich_stock(product)
@@ -276,13 +293,26 @@ class ProductService:
         if product.status == ProductStatus.INACTIVE.value:
             return self._enrich_stock(product)
 
+        old_state = self._effective_state(product)
+        changed = False
+
         if not has_stock and product.status == ProductStatus.ACTIVE.value:
             product.status = ProductStatus.OUT_OF_STOCK.value
             product.updated_at = utc_now()
-            product = self.repository.save(product)
+            changed = True
         elif has_stock and product.status == ProductStatus.OUT_OF_STOCK.value:
             product.status = ProductStatus.ACTIVE.value
             product.updated_at = utc_now()
+            changed = True
+
+        if changed:
+            self.history.stage(ProductStatusHistory(
+                product_id=product_id,
+                previous_state=old_state,
+                new_state=self._effective_state(product),
+                changed_by=None,
+                changed_by_role="system",
+            ))
             product = self.repository.save(product)
 
         return self._enrich_stock(product)
@@ -316,12 +346,20 @@ class ProductService:
         product = self.repository.find_by_id(product_id)
         if product is None:
             raise ProductNotFound(product_id)
-        
+
         if not product.is_blocked:
+            old_state = self._effective_state(product)
             product.is_blocked = True
             product.updated_at = utc_now()
+            self.history.stage(ProductStatusHistory(
+                product_id=product_id,
+                previous_state=old_state,
+                new_state="blocked",
+                changed_by=admin_id,
+                changed_by_role="admin",
+            ))
             product = self.repository.save(product)
-            
+
         return self._enrich_stock(product)
 
     def unblock_product(self, product_id: UUID, admin_id: UUID) -> Product:
@@ -329,10 +367,32 @@ class ProductService:
         product = self.repository.find_by_id(product_id)
         if product is None:
             raise ProductNotFound(product_id)
-            
+
         if product.is_blocked:
             product.is_blocked = False
             product.updated_at = utc_now()
+            new_state = self._effective_state(product)
+            self.history.stage(ProductStatusHistory(
+                product_id=product_id,
+                previous_state="blocked",
+                new_state=new_state,
+                changed_by=admin_id,
+                changed_by_role="admin",
+            ))
             product = self.repository.save(product)
-            
+
         return self._enrich_stock(product)
+
+    def get_status_history(
+        self, product_id: UUID
+    ) -> list[ProductStatusHistory]:
+        """Return the state change log for a product, newest first."""
+        if self.repository.find_by_id(product_id) is None:
+            raise ProductNotFound(product_id)
+        return self.history.find_by_product_id(product_id)
+
+    def _effective_state(self, product: Product) -> str:
+        """The state visible to the outside world, collapsing is_blocked into 'blocked'."""
+        if product.is_blocked:
+            return "blocked"
+        return product.status
