@@ -8,7 +8,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from src.repositories import ProductRepository
+from src.repositories import ProductRepository, ProductStatusHistoryRepository
 from src.schemas import ProductResponse, StockStatusUpdateRequest
 from src.services import ProductService
 from src.services.inventory import InventoryService
@@ -21,6 +21,7 @@ class InternalController:
             product_repository=ProductRepository(db),
             storage_service=StorageService(),
             inventory_service=InventoryService(),
+            history_repository=ProductStatusHistoryRepository(db),
         )
 
     async def update_stock_status(

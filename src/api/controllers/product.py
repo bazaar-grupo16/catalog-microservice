@@ -21,7 +21,7 @@ from src.dtos import (
     ReorderImagesDTO,
     UpdateProductDTO,
 )
-from src.repositories import ProductRepository
+from src.repositories import ProductRepository, ProductStatusHistoryRepository
 from src.services.inventory import InventoryService
 from src.services.storage import StorageService
 from src.schemas import (
@@ -32,6 +32,7 @@ from src.schemas import (
     ProductListRequest,
     ProductListResponse,
     ProductResponse,
+    ProductStatusHistoryResponse,
     ProductUpdateRequest,
     ReorderImagesRequest,
     ShareLinkData,
@@ -49,6 +50,7 @@ class ProductController:
             product_repository=ProductRepository(db),
             storage_service=StorageService(),
             inventory_service=InventoryService(),
+            history_repository=ProductStatusHistoryRepository(db),
         )
 
     async def create_product(
@@ -120,10 +122,15 @@ class ProductController:
         self,
         product_id: UUID,
         payload: ProductUpdateRequest,
+        user_id: UUID,
     ) -> ProductResponse:
         dto = UpdateProductDTO(**payload.model_dump())
-        product = self.service.update_product(product_id, dto)
+        product = self.service.update_product(product_id, dto, changed_by=user_id)
         return ProductResponse(data=product)
+
+    async def get_status_history(self, product_id: UUID) -> ProductStatusHistoryResponse:
+        entries = self.service.get_status_history(product_id)
+        return ProductStatusHistoryResponse(data=entries)
 
     async def add_images(
         self, product_id: UUID, files: list[UploadFile]

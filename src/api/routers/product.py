@@ -17,6 +17,7 @@ from src.schemas import (
     ProductListRequest,
     ProductListResponse,
     ProductResponse,
+    ProductStatusHistoryResponse,
     ProductUpdateRequest,
     ReorderImagesRequest,
     ShareLinkResponse,
@@ -146,7 +147,7 @@ async def update_product(
     db: DbSession,
     user_id: UserID,
 ) -> ProductResponse:
-    return await ProductController(db).update_product(id, payload)
+    return await ProductController(db).update_product(id, payload, user_id)
 
 
 @router.post(
@@ -329,3 +330,21 @@ async def unblock_product(
     user_id: UserID,
 ) -> ProductResponse:
     return await ProductController(db).unblock_product(id, user_id)
+
+
+@router.get(
+    "/{id}/status-history",
+    response_model=ProductStatusHistoryResponse,
+    summary="Get product status history",
+    description="Admin only: returns the full state change log for a product, newest first.",
+    responses={
+        401: {"description": "Missing or invalid Authorization header", "model": ErrorResponse},
+        404: {"description": "Product not found", "model": ErrorResponse},
+    },
+)
+async def get_status_history(
+    id: UUID,
+    db: DbSession,
+    user_id: UserID,
+) -> ProductStatusHistoryResponse:
+    return await ProductController(db).get_status_history(id)
