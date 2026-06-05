@@ -11,6 +11,7 @@ Microservicio de catálogo de productos para la plataforma Bazaar. Expone una AP
 - [Endpoints](#endpoints)
   - [Health](#health)
   - [Productos](#productos)
+  - [Administración](#administración)
   - [Formato de errores](#formato-de-errores)
 - [Arquitectura en capas](#arquitectura-en-capas)
 - [Integración con inventory service](#integración-con-inventory-service)
@@ -47,9 +48,11 @@ Microservicio de catálogo de productos para la plataforma Bazaar. Expone una AP
 │   ├── exceptions/             # Excepciones de dominio
 │   │   └── product.py          # ProductNotFound, ImageNotFound, ImageValidationError, etc.
 │   ├── models/                 # Entidades SQLAlchemy
-│   │   └── product.py          # Product (ORM)
+│   │   ├── product.py          # Product (ORM)
+│   │   └── product_status_history.py  # ProductStatusHistory (ORM) — historial de estados
 │   ├── repositories/           # Acceso a datos — único lugar que usa Session
-│   │   └── product.py          # ProductRepository: find_by_id, find_all, create, save
+│   │   ├── product.py          # ProductRepository: find_by_id, find_all, create, save
+│   │   └── product_status_history.py  # ProductStatusHistoryRepository: stage, find_by_product_id
 │   ├── schemas/                # Contratos Pydantic de la API
 │   │   ├── product.py          # Request/response schemas de productos
 │   │   └── error.py            # ErrorResponse (RFC 7807)
@@ -99,7 +102,7 @@ Los endpoints que requieren autenticación devuelven `401` en formato `applicati
 |-------------|-----------|
 | **Públicos** (sin auth) | `GET /products`, `GET /products/{id}`, `GET /products/{id}/share-link`, `GET /livez`, `GET /readyz`, `PATCH /internal/products/{id}/stock-status` |
 | **Auth via NGINX** (`X-User-ID` inyectado por el Ingress) | `GET /my-products` |
-| **Auth via JWT** (requieren `Authorization: Bearer <token>`) | `POST /products`, `PATCH /products/{id}`, `DELETE /products/{id}`, y todos los endpoints de imágenes |
+| **Auth via JWT** (requieren `Authorization: Bearer <token>`) | `POST /products`, `PATCH /products/{id}`, `DELETE /products/{id}`, todos los endpoints de imágenes, `GET /products/{id}/status-history`, `PATCH /products/{id}/block`, `PATCH /products/{id}/unblock` |
 
 El Ingress está dividido en dos recursos:
 
@@ -338,6 +341,76 @@ Todos los keys deben pertenecer al producto; si alguno no existe, se rechaza tod
 Debe contener exactamente las mismas URLs que el producto, en el nuevo orden deseado.
 
 **Respuesta `200`:** objeto `ProductResponse` con el nuevo orden de imágenes.
+
+---
+
+### Administración
+
+Endpoints destinados exclusivamente al backoffice de administración. Requieren `Authorization: Bearer <token>` con un JWT válido.
+
+---
+
+#### `PATCH /products/{id}/block` — Bloquear producto
+
+Oculta el producto del catálogo público sin modificar su `status` interno. El campo `adminDisabled` en la respuesta pasa a `true`.
+
+**Respuesta `200`:** objeto `ProductResponse` con `adminDisabled: true`.  
+**Respuesta `404`:** si el producto no existe.
+
+---
+
+#### `PATCH /products/{id}/unblock` — Desbloquear producto
+
+Revierte el bloqueo administrativo. El producto vuelve a ser visible según su `status` (`active`, `inactive` u `out_of_stock`).
+
+**Respuesta `200`:** objeto `ProductResponse` con `adminDisabled: false`.  
+**Respuesta `404`:** si el producto no existe.
+
+---
+
+#### `GET /products/{id}/status-history` — Historial de cambios de estado
+
+Devuelve el historial completo de cambios de estado efectivo del producto, ordenado del más reciente al más antiguo.
+
+El **estado efectivo** unifica `status` e `is_blocked` en un único valor: si el producto está bloqueado por un administrador, su estado efectivo es `blocked` independientemente del `status` subyacente. Los cuatro estados posibles son: `active`, `inactive`, `out_of_stock`, `blocked`.
+
+Cada entrada registra quién realizó el cambio y desde qué rol:
+
+| `changedByRole` | Origen del cambio |
+|---|---|
+| `admin` | Bloqueo o desbloqueo manual desde el backoffice |
+| `seller` | Cambio de `status` o `stock` realizado por el vendedor |
+| `system` | Sincronización automática disparada por el inventory service |
+
+**Respuesta `200`:**
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "previousState": "active",
+      "newState": "blocked",
+      "changedAt": "2024-06-01T14:23:00Z",
+      "changedBy": "uuid-del-admin",
+      "changedByRole": "admin"
+    },
+    {
+      "id": "uuid",
+      "previousState": null,
+      "newState": "active",
+      "changedAt": "2024-05-20T10:00:00Z",
+      "changedBy": "uuid-del-vendedor",
+      "changedByRole": "seller"
+    }
+  ]
+}
+```
+
+> `previousState` es `null` solo en la primera entrada registrada para ese producto.  
+> `changedBy` es `null` cuando el cambio fue disparado por el sistema (rol `system`).  
+> Los productos creados antes de esta funcionalidad tendrán un array vacío — no se realiza backfill.
+
+**Respuesta `404`:** si el producto no existe.
 
 ---
 
