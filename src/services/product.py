@@ -383,6 +383,52 @@ class ProductService:
 
         return self._enrich_stock(product)
 
+    def block_seller_products(self, seller_id: UUID, admin_id: UUID | None) -> int:
+        """Admin only: block all products belonging to a seller."""
+        products = self.repository.find_by_seller_id(seller_id)
+        to_update = []
+        for product in products:
+            if not product.is_blocked:
+                old_state = self._effective_state(product)
+                product.is_blocked = True
+                product.updated_at = utc_now()
+                self.history.stage(ProductStatusHistory(
+                    product_id=product.id,
+                    previous_state=old_state,
+                    new_state="blocked",
+                    changed_by=admin_id,
+                    changed_by_role="admin_seller_block",
+                ))
+                to_update.append(product)
+        if to_update:
+            self.repository.bulk_save(to_update)
+        return len(to_update)
+
+    def unblock_seller_products(self, seller_id: UUID, admin_id: UUID | None) -> int:
+        """Admin only: unblock only products that were blocked by a seller block (not individually)."""
+        products = self.repository.find_by_seller_id(seller_id)
+        to_update = []
+        for product in products:
+            if not product.is_blocked:
+                continue
+            last = self.history.find_last_by_product_id(product.id)
+            if last is None or last.changed_by_role != "admin_seller_block":
+                continue
+            product.is_blocked = False
+            product.updated_at = utc_now()
+            new_state = self._effective_state(product)
+            self.history.stage(ProductStatusHistory(
+                product_id=product.id,
+                previous_state="blocked",
+                new_state=new_state,
+                changed_by=admin_id,
+                changed_by_role="admin",
+            ))
+            to_update.append(product)
+        if to_update:
+            self.repository.bulk_save(to_update)
+        return len(to_update)
+
     def get_status_history(
         self, product_id: UUID
     ) -> list[ProductStatusHistory]:

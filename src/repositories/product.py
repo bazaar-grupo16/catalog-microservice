@@ -47,6 +47,19 @@ class ProductRepository:
         self.db.delete(product)
         self.db.commit()
 
+    def find_by_seller_id(self, seller_id: UUID) -> list[Product]:
+        """Return all products belonging to a seller."""
+        query = select(Product).where(Product.seller_id == seller_id)
+        return list(self.db.scalars(query).all())
+
+    def bulk_save(self, products: list[Product]) -> None:
+        """Persist changes to multiple products in a single commit."""
+        for product in products:
+            self.db.add(product)
+        self.db.commit()
+        for product in products:
+            self.db.refresh(product)
+
     def find_all(self, dto: ProductFilterDTO) -> tuple[list[Product], int]:
         """Return a paginated product list with optional filters applied."""
         filters = []
