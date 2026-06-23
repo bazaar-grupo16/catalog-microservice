@@ -18,6 +18,16 @@ class ProductStatusHistoryRepository:
         """Add entry to the session without committing — committed with the next save."""
         self.db.add(entry)
 
+    def find_last_by_product_id(self, product_id: UUID) -> ProductStatusHistory | None:
+        """Return the most recent history entry for a product."""
+        query = (
+            select(ProductStatusHistory)
+            .where(ProductStatusHistory.product_id == product_id)
+            .order_by(ProductStatusHistory.changed_at.desc())
+            .limit(1)
+        )
+        return self.db.scalar(query)
+
     def find_by_product_id(self, product_id: UUID) -> list[ProductStatusHistory]:
         query = (
             select(ProductStatusHistory)

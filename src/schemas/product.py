@@ -192,3 +192,11 @@ class ProductStatusHistoryEntry(BaseModel):
 
 class ProductStatusHistoryResponse(BaseModel):
     data: list[ProductStatusHistoryEntry]
+
+
+class SellerBlockRequest(BaseModel):
+    admin_id: UUID | None = None
+
+
+class SellerBlockResponse(BaseModel):
+    affected: int
